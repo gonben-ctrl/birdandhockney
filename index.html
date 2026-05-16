@@ -2413,7 +2413,7 @@ async function loadFromSupabase() {
       const remoteTs = new Date(data.updated_at).getTime();
       const localTs  = state._lastSaved || 0;
       if (remoteTs > localTs) {
-        state = migrateState(data.data);
+        state = migrateToV4(data.data);
         localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
         render();
       }
@@ -2432,7 +2432,7 @@ function initSupabaseRealtime() {
       const remoteTs = new Date(payload.new.updated_at).getTime();
       const localTs  = state._lastSaved || 0;
       if (remoteTs > localTs + 500) { // +500ms para ignorar eco propio
-        state = migrateState(payload.new.data);
+        state = migrateToV4(payload.new.data);
         state._lastSaved = remoteTs;
         localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
         render();
