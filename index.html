@@ -1696,7 +1696,7 @@ body[data-rol="instalador"] .nav [data-view="agenda"] {
 
 
 <div class="modal-overlay" id="modalOverlay">
-  <div class="modal" id="modal">
+  <div class="modal" id="modal" onclick="event.stopPropagation()">
     <div class="modal-header">
       <div class="modal-title" id="modalTitle">Editar</div>
       <button class="modal-close" onclick="closeModal()">×</button>
@@ -2413,7 +2413,10 @@ async function loadFromSupabase() {
       const remoteTs = new Date(data.updated_at).getTime();
       const localTs  = state._lastSaved || 0;
       if (remoteTs > localTs) {
+        const localSession = state.config && state.config.session; // preservar sesión local
         state = migrateToV4(data.data);
+        if (localSession) state.config.session = localSession; // no pisar sesión activa
+        state._lastSaved = remoteTs;
         localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
         render();
       }
@@ -5515,7 +5518,7 @@ function openAvanceModal(idProy) {
               const border = flagged ? 'var(--red)' : hecho ? 'var(--green)' : 'var(--border)';
               const color = (flagged || hecho) ? 'white' : 'var(--gray)';
               const label = flagged ? '🔧' : hecho ? '✓' : i;
-              grid += `<button type="button" data-unidad-key="${p.id}-${o.id}-${i}" onclick="event.stopPropagation(); toggleUnidadCompletada('${p.id}', '${o.id}', ${i})" ondblclick="event.stopPropagation(); flagUnidadServicio('${p.id}', '${o.id}', ${i})" title="Unidad ${i}" style="width: 38px; height: 38px; border-radius: 6px; border: 2px solid ${border}; background: ${bg}; color: ${color}; font-weight: 700; font-size: 12px; cursor: pointer; font-family: inherit;">${label}</button>`;
+              grid += `<button type="button" data-unidad-key="${p.id}-${o.id}-${i}" onclick="event.stopPropagation(); cycleUnidad('${p.id}', '${o.id}', ${i})" title="${flagged ? 'Servicio — clic para desmarcar' : hecho ? 'Completada — clic para marcar como servicio' : 'Sin marcar — clic para completar'}" style="width: 38px; height: 38px; border-radius: 6px; border: 2px solid ${border}; background: ${bg}; color: ${color}; font-weight: 700; font-size: 12px; cursor: pointer; font-family: inherit;">${label}</button>`;
             }
             return `<div style="margin-bottom: 6px;">
               <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 12px; flex-wrap: wrap;">
@@ -9064,7 +9067,7 @@ function renderPersianasInstaladas(p) {
         return `<div style="border-bottom:2px solid var(--border);">
           <div style="background:var(--navy-light);padding:10px 18px;display:flex;align-items:center;justify-content:space-between;">
             <span style="font-size:13px;font-weight:700;color:var(--navy);text-transform:capitalize;">${diaFmt}</span>
-            <span style="font-size:11px;font-weight:700;color:var(--green);">${eventosDelDia.length} unidad${eventosDelDia.length!==1?"es":""} instalada${eventosDelDia.length!==1?"s":""}</span>
+            <span style="font-size:11px;font-weight:700;color:var(--green);">${[...new Set(eventosDelDia.map(e=>{const m=e.descripcion.match(/^Unidad (\d+)/);return m?m[1]:null;}).filter(Boolean))].length} unidades instaladas</span>
           </div>
           ${usuariosDia.map(usuario => {
             const uEvt = eventosDelDia.filter(e => e.usuario === usuario);
@@ -9085,7 +9088,10 @@ function renderPersianasInstaladas(p) {
               const ord = m ? m[1] : "?";
               if (!porOrdenU[ord]) porOrdenU[ord] = [];
               const n = e.descripcion.match(/^Unidad (\d+)/);
-              if (n) porOrdenU[ord].push(parseInt(n[1]));
+              if (n) {
+                const num = parseInt(n[1]);
+                if (!porOrdenU[ord].includes(num)) porOrdenU[ord].push(num);
+              }
             });
             return `<div style="padding:12px 18px;border-bottom:1px solid var(--border);">
               <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap;">
@@ -9389,6 +9395,35 @@ function toggleUnidadCompletada(idProy, idOrden, numUnidad) {
 
   // Si NO estamos en modal, hacer un render para actualizar otras vistas (la lista de Instalacion, etc.)
   if (!modalContext) render();
+}
+
+function cycleUnidad(idProy, idOrden, numUnidad) {
+  if (!window._avanceFlagged) window._avanceFlagged = new Set();
+  const key = `${idProy}|${idOrden}|${numUnidad}`;
+  const p = findProy(idProy);
+  if (!p) return;
+  const orden = (p.ordenesProduccion || []).find(o => o.id === idOrden);
+  if (!orden) return;
+  const hecho = Array.isArray(orden.unidadesCompletadas) && orden.unidadesCompletadas.some(u => u.num === numUnidad);
+  const flagged = window._avanceFlagged.has(key);
+  if (!hecho && !flagged) {
+    // Estado 1→2: Sin marcar → Completada
+    toggleUnidadCompletada(idProy, idOrden, numUnidad);
+  } else if (hecho && !flagged) {
+    // Estado 2→3: Completada → Servicio
+    flagUnidadServicio(idProy, idOrden, numUnidad);
+  } else {
+    // Estado 3→1: Servicio → Sin marcar
+    window._avanceFlagged.delete(key);
+    const btn = document.querySelector(`[data-unidad-key="${idProy}-${idOrden}-${numUnidad}"]`);
+    if (btn) {
+      btn.style.background = "white";
+      btn.style.borderColor = "var(--border)";
+      btn.style.color = "var(--gray)";
+      btn.textContent = String(numUnidad);
+      btn.title = "Sin marcar — clic para completar";
+    }
+  }
 }
 
 function flagUnidadServicio(idProy, idOrden, numUnidad) {
@@ -14030,7 +14065,8 @@ async function submitModal() {
 }
 
 document.addEventListener("click", e => {
-  if (e.target.id === "modalOverlay") closeModal();
+  // Solo cerrar si el clic fue exactamente en el fondo oscuro, nunca dentro del modal
+  if (e.target.id === "modalOverlay" && !e.target.closest("#modal")) closeModal();
 });
 document.addEventListener("keydown", e => {
   if (e.key === "Escape") { const o = document.getElementById("modalOverlay"); if (o && o.classList.contains("open")) closeModal(); }
@@ -14074,6 +14110,9 @@ document.addEventListener("keydown", e => {
 /* =================== ARRANQUE =================== */
 async function initApp() {
   await hashInitialPasswords();
+  // Cargar datos de Supabase ANTES de verificar sesión — así el login siempre tiene los usuarios reales
+  await loadFromSupabase();
+  initSupabaseRealtime();
   poblarLoginUserDropdown();
   if (!isSessionActive()) {
     document.getElementById("loginOverlay").classList.add("show");
@@ -14093,8 +14132,7 @@ async function initApp() {
   // FIX: startNotifPolling nunca se llamaba — activar polling de notificaciones push
   initNotifications();
   startNotifPolling();
-  // SYNC: cargar datos remotos y activar tiempo real
-  loadFromSupabase().then(() => initSupabaseRealtime());
+  // SYNC: tiempo real ya iniciado arriba en initApp (antes del login check)
 }
 
 document.addEventListener("DOMContentLoaded", () => { initApp(); });
