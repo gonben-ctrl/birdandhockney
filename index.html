@@ -2539,8 +2539,13 @@ function borrarTodo() {
   state.config.customLists  = _customLists;
   ensureV4Migrations(state);
   state.config.session = null;
-  saveState();
-  setTimeout(() => location.reload(true), 200);
+  // Marcar timestamp reciente para que Supabase no restaure los datos al recargar
+  state._lastSaved = Date.now();
+  if (typeof _syncTimer !== "undefined" && _syncTimer) clearTimeout(_syncTimer);
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch(e) {}
+  // También subir el estado limpio a Supabase para que otros dispositivos lo vean
+  if (typeof _syncUp === "function") _syncUp().finally(() => location.reload(true));
+  else setTimeout(() => location.reload(true), 300);
 }
 function exportData() {
   const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
