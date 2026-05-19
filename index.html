@@ -551,7 +551,10 @@
   .idet-on-site-dot { width: 8px; height: 8px; border-radius: 50%; background: #4CAF50; box-shadow: 0 0 0 4px rgba(76,175,80,0.3); animation: pulseDot 1.6s ease-in-out infinite; }
   @keyframes pulseDot { 0%,100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.15); opacity: 0.7; } }
 
-  .idet-actions { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 14px; }
+  .idet-actions { display: flex; align-items: stretch; gap: 8px; margin-bottom: 14px; }
+  .idet-action-mini { display: flex; align-items: center; justify-content: center; width: 48px; min-width: 48px; border-radius: 10px; border: 1px solid var(--border); background: white; color: var(--navy); cursor: pointer; font-size: 20px; transition: all 0.15s; flex-shrink: 0; }
+  .idet-action-mini:active { transform: scale(0.93); }
+  .idet-action-mini:hover { background: var(--navy-light); border-color: var(--navy); }
   .idet-action { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; min-height: 60px; padding: 10px 6px; border-radius: 10px; border: none; cursor: pointer; font-family: inherit; transition: all 0.15s; font-weight: 700; text-align: center; }
   .idet-action:active { transform: scale(0.97); }
   .idet-action-ico { font-size: 20px; line-height: 1; }
@@ -594,6 +597,7 @@
     .idet-action { min-height: 54px; padding: 8px 4px; }
     .idet-action-ico { font-size: 18px; }
     .idet-action-text { font-size: 10px; }
+    .idet-action-mini { width: 44px; min-width: 44px; font-size: 18px; }
     .idet-tab { padding: 10px 2px; }
     .idet-tab-label { font-size: 10px; }
   }
@@ -1721,17 +1725,6 @@ body[data-rol="instalador"] .nav [data-view="agenda"] {
 </div>
 
 <div class="toast" id="toast"></div>
-<div id="stressOverlay" style="display:none;position:fixed;inset:0;background:rgba(31,42,68,0.85);z-index:9999;flex-direction:column;align-items:center;justify-content:center;gap:16px;">
-  <div style="background:white;border-radius:16px;padding:32px 40px;text-align:center;max-width:360px;">
-    <div style="font-size:36px;margin-bottom:12px;">⚙️</div>
-    <div style="font-size:16px;font-weight:700;color:var(--navy);margin-bottom:8px;">Generando datos de prueba…</div>
-    <div id="stressStatus" style="font-size:13px;color:var(--gray);">Creando proyectos, arquitectos, servicios…</div>
-    <div style="margin-top:16px;height:4px;background:#eee;border-radius:2px;overflow:hidden;">
-      <div style="height:100%;background:var(--navy);border-radius:2px;animation:progressPulse 1.5s ease-in-out infinite;"></div>
-    </div>
-  </div>
-</div>
-<style>@keyframes progressPulse{0%{width:10%}50%{width:85%}100%{width:10%}}</style>
 
 <script>
 /* =================== SECCIONES DE ACCESO =================== */
@@ -3445,16 +3438,19 @@ function renderInstalacionDetail() {
     <!-- Acciones primarias -->
     <div class="idet-actions">
       ${enObra ?
-        `<button class="idet-action idet-action-danger" onclick="registrarSalida('${p.id}')">
+        `<button class="idet-action idet-action-danger" style="flex:1;" onclick="registrarSalida('${p.id}')">
           <span class="idet-action-ico">🔴</span>
           <span class="idet-action-text">Registrar salida</span>
         </button>`
         :
-        `<button class="idet-action idet-action-success" onclick="registrarLlegada('${p.id}')">
+        `<button class="idet-action idet-action-success" style="flex:1;" onclick="registrarLlegada('${p.id}')">
           <span class="idet-action-ico">🟢</span>
           <span class="idet-action-text">Registrar llegada</span>
         </button>`
       }
+      <label class="idet-action-mini" title="Tomar foto" for="idet-foto-${p.id}">📸<input type="file" id="idet-foto-${p.id}" accept="image/*" capture="environment" multiple style="display:none;" onchange="quickPhotoUpload('${p.id}', this)"></label>
+      <button class="idet-action-mini" title="Registrar avance" onclick="openAvanceModal('${p.id}')">📋</button>
+      <button class="idet-action-mini" title="Agregar pendiente" onclick="openPendienteModal('${p.id}')">⚠️</button>
     </div>
 
     ${!currentUserIsInstalador() && getInstaladores().length > 0 ? `
@@ -5417,7 +5413,16 @@ function renderBitAvances(p) {
           </div>
           <button class="icon-btn danger" onclick="deleteAvance('${p.id}', '${a.id}')" title="Eliminar avance">×</button>
         </div>
-        <div style="font-size: 13px; color: var(--navy); white-space: pre-wrap;">${escape(a.texto)}</div>
+        ${a.texto ? `<div style="font-size: 13px; color: var(--navy); white-space: pre-wrap; margin-bottom: 4px;">${escape(a.texto)}</div>` : ""}
+        ${(a._unidades && a._unidades.length > 0) ? `
+          <div style="margin-top: 6px; display: flex; flex-direction: column; gap: 4px;">
+            ${a._unidades.map(u => `
+              <div style="background: #E8F5E9; border-radius: 6px; padding: 4px 8px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+                <span style="font-size: 11px; font-weight: 700; color: #1B5E20;">📦 ${escape(u.orden)}</span>
+                <span style="font-size: 11px; color: #388E3C;">${u.unidades.length}/${u.total} unidades instaladas</span>
+                <span style="font-size: 11px; color: #2E7D32; background: white; border-radius: 4px; padding: 1px 6px; border: 1px solid #A5D6A7;">u${u.unidades.join(", ")}</span>
+              </div>`).join("")}
+          </div>` : ""}
         ${(a.fotos && a.fotos.length > 0) ? `<div style="display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap;">
           ${a.fotos.map(idFoto => {
             const foto = (p.bitacoraInstalacion.fotos || []).find(f => f.id === idFoto);
@@ -5743,7 +5748,8 @@ async function submitAvance() {
     usuario,
     tag,
     texto,
-    fotos: fotosIds
+    fotos: fotosIds,
+    _unidades: [] // se rellena abajo después del cálculo de diff
   });
   // Si es problema, crear pendiente automaticamente
   if (tag === "problema") {
@@ -5775,6 +5781,11 @@ async function submitAvance() {
       _unidadesNuevas.push({ orden: o.numero, unidades: nuevas, total: o.unidades || 0 });
     }
   });
+
+  // Guardar unidades instaladas en el entry de bitácora recién creado
+  if (_unidadesNuevas.length > 0 && p.bitacoraInstalacion.avances.length > 0) {
+    p.bitacoraInstalacion.avances[0]._unidades = _unidadesNuevas;
+  }
 
   // 2. Tiempo activo desde última llegada sin salida (del usuario actual)
   let _tiempoStr = null;
@@ -5826,66 +5837,84 @@ async function submitAvance() {
   const totalFlagged = Object.values(flaggedByOrden).reduce((s, arr) => s + arr.length, 0);
 
   if (totalFlagged > 0) {
-    // Sólo cerrar si NO queda ninguna unidad sin terminar y sin marcar en rojo
+    // Siempre generar servicio para las unidades rojas, sin importar si quedan otras sin marcar
+    if (!Array.isArray(state.servicios)) state.servicios = [];
+    const _manana = new Date(); _manana.setDate(_manana.getDate() + 1);
+    const _fechaManana = _manana.toISOString().slice(0, 10);
+    const _instaladorProy = (p.instaladoresAsignados && p.instaladoresAsignados[0]) || "";
+    const _partidas = [];
+    ordenes.forEach(o => {
+      (flaggedByOrden[o.id] || []).sort((a,b)=>a-b).forEach(num => {
+        _partidas.push({ orden: o.numero, idOrden: o.id, numUnidad: num });
+      });
+    });
+    const _resumen = Object.entries(flaggedByOrden).map(([idOrden, nums]) => {
+      const ord = ordenes.find(o => o.id === idOrden);
+      return `${ord ? ord.numero : idOrden}: u${[...nums].sort((a,b)=>a-b).join(", ")}`;
+    }).join(" / ");
+    const _primera = _partidas[0] || {};
+    state.servicios.push({
+      id: nextServicioId(),
+      idProy: p.id,
+      fecha: today(),
+      tipo: "Pendiente instalación",
+      descripcion: `${totalFlagged} unidad(es) pendiente(s) — ${_resumen}`,
+      partidas: _partidas,
+      numeroOrden: _primera.orden || "",
+      idOrdenAsociada: _primera.idOrden || "",
+      numUnidad: _primera.numUnidad ? String(_primera.numUnidad) : "",
+      responsable: (p.responsables && p.responsables[0]) || "",
+      estado: "Abierto",
+      fechaCierre: "",
+      notas: "",
+      prioridad: "alta",
+      fechaLimite: "",
+      fotos: [],
+      fechaProgramada: _fechaManana,
+      horaProgramada: "09:00",
+      instaladorAsignado: _instaladorProy,
+      _esInstalacionPendiente: true
+    });
+    serviciosGenerados++;
+
+    // Marcar las unidades rojas como completadas (verde) — se les da seguimiento en el servicio
+    const _ahora = nowIso();
+    ordenes.forEach(o => {
+      const flaggedNums = flaggedByOrden[o.id] || [];
+      if (flaggedNums.length === 0) return;
+      if (!Array.isArray(o.unidadesCompletadas)) o.unidadesCompletadas = [];
+      flaggedNums.forEach(num => {
+        if (!o.unidadesCompletadas.find(u => u.num === num)) {
+          o.unidadesCompletadas.push({ num, fecha: _ahora, usuario, _porServicio: true });
+        }
+      });
+    });
+
+    p._pendienteServicio = true;
+    p.ultimaActualizacion = today();
+
+    // Verificar si TODAS las unidades ya están en verde (incluidas las recién pasadas desde rojo)
     const todasListas = ordenes.every(o => {
       const completadas = (o.unidadesCompletadas || []).map(u => u.num);
-      const flaggedEstaOrden = flaggedByOrden[o.id] || [];
       for (let i = 1; i <= (o.unidades || 1); i++) {
-        if (!completadas.includes(i) && !flaggedEstaOrden.includes(i)) return false;
+        if (!completadas.includes(i)) return false;
       }
       return true;
     });
+
     if (todasListas) {
-      // Generar UN SOLO servicio con todas las unidades como partidas
-      if (!Array.isArray(state.servicios)) state.servicios = [];
-      const _manana = new Date(); _manana.setDate(_manana.getDate() + 1);
-      const _fechaManana = _manana.toISOString().slice(0, 10);
-      const _instaladorProy = (p.instaladoresAsignados && p.instaladoresAsignados[0]) || "";
-      const _partidas = [];
-      ordenes.forEach(o => {
-        (flaggedByOrden[o.id] || []).sort((a,b)=>a-b).forEach(num => {
-          _partidas.push({ orden: o.numero, idOrden: o.id, numUnidad: num });
-        });
-      });
-      const _resumen = Object.entries(flaggedByOrden).map(([idOrden, nums]) => {
-        const ord = ordenes.find(o => o.id === idOrden);
-        return `${ord ? ord.numero : idOrden}: u${[...nums].sort((a,b)=>a-b).join(", ")}`;
-      }).join(" / ");
-      const _primera = _partidas[0] || {};
-      state.servicios.push({
-        id: nextServicioId(),
-        idProy: p.id,
-        fecha: today(),
-        tipo: "Pendiente instalación",
-        descripcion: `${totalFlagged} unidad(es) pendiente(s) — ${_resumen}`,
-        partidas: _partidas,
-        numeroOrden: _primera.orden || "",
-        idOrdenAsociada: _primera.idOrden || "",
-        numUnidad: _primera.numUnidad ? String(_primera.numUnidad) : "",
-        responsable: (p.responsables && p.responsables[0]) || "",
-        estado: "Abierto",
-        fechaCierre: "",
-        notas: "",
-        prioridad: "alta",
-        fechaLimite: "",
-        fotos: [],
-        fechaProgramada: _fechaManana,
-        horaProgramada: "09:00",
-        instaladorAsignado: _instaladorProy,
-        _esInstalacionPendiente: true
-      });
-      serviciosGenerados++;
-      // NO marcar como Entregado — quedan unidades pendientes de servicio
-      // Solo quitar de agenda marcando visitas como completadas
-      p._pendienteServicio = true;
-      p.ultimaActualizacion = today();
-      p.bitacora.unshift({ fecha: nowIso(), usuario, tipo: "sistema", descripcion: `🔧 ${totalFlagged} unidad(es) enviadas a servicio — instalación pendiente.` });
+      // Todas resueltas → quitar de agenda
+      p.bitacora.unshift({ fecha: nowIso(), usuario, tipo: "sistema", descripcion: `🔧 ${totalFlagged} unidad(es) a servicio — todas las unidades resueltas, quitada de agenda.` });
       if (Array.isArray(p.visitasProgramadas)) {
         p.visitasProgramadas.forEach(v => { if (!v.completada) v.completada = true; });
       }
-      instalacionTerminada = false; // no está terminada, solo parcial
-      window._avanceFlagged = new Set();
+    } else {
+      // Quedan unidades sin marcar → sigue en agenda
+      p.bitacora.unshift({ fecha: nowIso(), usuario, tipo: "sistema", descripcion: `🔧 ${totalFlagged} unidad(es) enviadas a servicio — quedan unidades pendientes de instalación.` });
     }
+
+    instalacionTerminada = false; // nunca se marca como Entregado automáticamente
+    window._avanceFlagged = new Set();
   } else if (totalUds > 0 && udsComp >= totalUds) {
     // Todas las unidades terminadas — quitar de agenda pero NO marcar como Entregado
     if (Array.isArray(p.visitasProgramadas)) {
@@ -5915,7 +5944,7 @@ async function submitAvance() {
       toast("Avance y salida registrados.", "success");
     }
   } else if (serviciosGenerados > 0) {
-    toast(`🔧 ${serviciosGenerados} servicio(s) generado(s) — instalación quitada de agenda.`, "success");
+    toast(`🔧 ${serviciosGenerados} servicio(s) generado(s). Avance registrado.`, "success");
   } else {
     toast("Avance registrado.", "success");
   }
@@ -14026,37 +14055,6 @@ function renderConfig() {
       </div>
     </div>
 
-    <div class="card" style="margin-top: 16px; border: 2px solid #1F2A44;">
-      <div class="card-header" style="background: #1F2A44;">
-        <div class="card-title" style="color: white;">🧪 Stress Test — Generador de datos masivos</div>
-      </div>
-      <div class="card-body">
-        <p style="font-size: 13px; color: var(--gray); margin-bottom: 16px;">Genera cientos de proyectos, arquitectos, servicios, tareas y cotizaciones con datos realistas para probar rendimiento, filtros, búsqueda y dashboards bajo carga real. <strong style="color:var(--red);">Los datos actuales se conservan — se agregan encima.</strong></p>
-        <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:12px;">
-          <button onclick="launchDummyData('pequeño')" style="padding:14px;border:2px solid #4CAF50;border-radius:10px;background:#E8F5E9;cursor:pointer;font-family:inherit;">
-            <div style="font-size:18px;margin-bottom:4px;">🌱</div>
-            <div style="font-weight:700;color:#2E7D32;font-size:13px;">Pequeño</div>
-            <div style="font-size:11px;color:var(--gray);margin-top:2px;">50 proy · 20 arq · 60 serv · 100 tareas</div>
-          </button>
-          <button onclick="launchDummyData('mediano')" style="padding:14px;border:2px solid #1976D2;border-radius:10px;background:#E3F2FD;cursor:pointer;font-family:inherit;">
-            <div style="font-size:18px;margin-bottom:4px;">🏢</div>
-            <div style="font-weight:700;color:#1565C0;font-size:13px;">Mediano</div>
-            <div style="font-size:11px;color:var(--gray);margin-top:2px;">150 proy · 60 arq · 150 serv · 200 tareas</div>
-          </button>
-          <button onclick="launchDummyData('grande')" style="padding:14px;border:2px solid #E65100;border-radius:10px;background:#FFF3E0;cursor:pointer;font-family:inherit;">
-            <div style="font-size:18px;margin-bottom:4px;">🏗</div>
-            <div style="font-weight:700;color:#E65100;font-size:13px;">Grande</div>
-            <div style="font-size:11px;color:var(--gray);margin-top:2px;">300 proy · 100 arq · 300 serv · 400 tareas</div>
-          </button>
-          <button onclick="launchDummyData('extremo')" style="padding:14px;border:2px solid #B71C1C;border-radius:10px;background:#FFEBEE;cursor:pointer;font-family:inherit;">
-            <div style="font-size:18px;margin-bottom:4px;">💥</div>
-            <div style="font-weight:700;color:#B71C1C;font-size:13px;">Extremo</div>
-            <div style="font-size:11px;color:var(--gray);margin-top:2px;">500 proy · 150 arq · 500 serv · 600 tareas</div>
-          </button>
-        </div>
-        <p style="font-size:11px;color:var(--gray);text-align:center;">Después de generar, navega por el sistema y observa el rendimiento. Usa "↻ Reset" para volver a datos originales.</p>
-      </div>
-    </div>
   `;
 }
 
@@ -15175,467 +15173,7 @@ function v2BottomNavGo(view){
   }
 })();
 
-// ╔══════════════════════════════════════════════════════════════════╗
-// ║  STRESS TEST & DUMMY DATA GENERATOR                             ║
-// ╚══════════════════════════════════════════════════════════════════╝
-
-(function() {
-/* ── Datos realistas mexicanos ── */
-const ARQ_NOMBRES = ["Alejandro Herrera","Sofía Mendoza","Carlos Ramírez","Valentina Cruz","Miguel Ángel Torres","Isabella López","Fernando García","Camila Jiménez","Rodrigo Martínez","Daniela Flores","Sergio Castillo","Mariana Reyes","Arturo Morales","Lucía Vargas","Eduardo Núñez","Gabriela Romero","Pablo Gutiérrez","Fernanda Díaz","Oscar Vega","Natalia Soto","Andrés Peña","Valeria Ruiz","Diego Medina","Ximena Guerrero","Javier Salinas","Paola Aguilar","Emilio Ortega","Adriana Fuentes","Tomás Cabrera","Estefanía Molina","Humberto Ríos","Claudia Espinoza","Rafael Delgado","Pilar Sandoval","Salvador Ibarra","Lorena Acosta","Mauricio Paredes","Rebeca Luna","Ignacio Ponce","Erika Rojas","Benjamín Contreras","Cecilia Miranda","Gustavo Pacheco","Aurora Leal","Felipe Cervantes","Jacqueline Alvarado","Marco Trujillo","Diana Ochoa","César Sánchez","Gloria Ramos"];
-const ARQ_DESPACHOS = ["Estudio Herrera & Asociados","Arquitectura Contemporánea MX","Diseño y Espacio","H+C Arquitectos","Forma Urbana","Studio Mendoza","Vértice Arquitectura","Crux Diseño","Arq Collective","Panorama Estudio","Casa Mayor","Trazo Libre","Simetría Estudio","Bóveda Arquitectos","Umbral Diseño","Krea Studio","Nexo Arquitectura","Esencia Proyectos","Altitud Estudio","Morfosis MX","Eje Central Arq","Terracota Studio","Zenit Arquitectura","Plano & Forma","Vivo Arquitectura"];
-const COLONIA_CIUDAD = ["Polanco, CDMX","Santa Fe, CDMX","Lomas de Chapultepec, CDMX","Del Valle, CDMX","Condesa, CDMX","Roma Norte, CDMX","Narvarte, CDMX","Coyoacán, CDMX","Pedregal, CDMX","San Ángel, CDMX","Interlomas, Huixquilucan","Satelite, Naucalpan","Juriquilla, Querétaro","Valle Real, Guadalajara","Puerta de Hierro, GDL","Virreyes, Monterrey","San Pedro, Monterrey","Valle Oriente, MTY","Cancún Centro, Q.Roo","Mérida Norte, Yucatán","Tulum, Q.Roo","Acapulco Diamante, Gro","Puerto Vallarta, Jal","Playa del Carmen, Q.Roo","Los Cabos, BCS"];
-const PROY_NOMBRES = ["Penthouse Reforma","Casa Pedregal","Departamento Polanco","Oficinas Corporativas Santa Fe","Residencia Lomas","Suite Ejecutiva","Casa de Playa","Boutique Hotel","Villa Familiar","Departamento de Lujo","Estudio Moderno","Penthouse Condesa","Residencia Privada","Oficina Directiva","Loft Industrial","Casa Inteligente","Departamento Roma","Corporativo Torre","Casa Club","Residencia VIP","Apartamento Satélite","Casa Juriquilla","Suite Diamante","Cabaña Los Cabos","Residencia Playa","Departamento Mérida","Villa Tulum","Casa Valle Real","Estancia San Ángel","Oficinas Narvarte"];
-const TIPOSSERVICIO = ["Pendiente de instalación","Garantía","Reparación","Ajuste","Visita técnica","Mantenimiento","Otro"];
-const ESTADOS_PROY_ALL = ["Lead","Cotización enviada","Cotización aprobada","Anticipo pagado","En supervisión","En instalación","Entregado","Perdido"];
-const INSTALADORES = ["Efraín","Martín","Jorge","Ramón","Antonio"];
-const RESPONSABLES = ["Chris","Talis","Vendedor","Efraín"];
-const TIPOS_OBRA = ["Residencial","Comercial","Hospitalidad","Corporativo","Mixto"];
-const FOTO_PLACEHOLDER = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
-
-const rnd = (arr) => arr[Math.floor(Math.random() * arr.length)];
-const rndInt = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
-const rndBool = (p = 0.5) => Math.random() < p;
-const rndMonto = (min, max) => Math.round(rndInt(min, max) / 1000) * 1000;
-const pad = (n, len = 3) => String(n).padStart(len, "0");
-
-function dateOffset(days) {
-  const d = new Date();
-  d.setDate(d.getDate() + days);
-  return d.toISOString().slice(0, 10);
-}
-
-function randomPastDate(maxDaysAgo = 365) {
-  return dateOffset(-rndInt(1, maxDaysAgo));
-}
-
-function randomFutureDate(maxDaysAhead = 90) {
-  return dateOffset(rndInt(1, maxDaysAhead));
-}
-
-function randomBitacoraEntry(usuario, daysAgo) {
-  const tipos = ["Visita","Llamada","Cotización","Anticipo","Avance","Seguimiento","Nota","Problema","Solución"];
-  const textos = [
-    "Visita realizada en obra, cliente conforme con el avance.",
-    "Llamada con el arquitecto para confirmar materiales.",
-    "Se envió cotización actualizada con cambios solicitados.",
-    "Se recibió anticipo del 50%, se confirma inicio de producción.",
-    "Avance del 60% en instalación de persianas primer piso.",
-    "Seguimiento con cliente por ajuste de cortinas en recámara principal.",
-    "El cliente solicita cambio de color en motorización.",
-    "Problema con carril de instalación en ventanal principal, se reprograma.",
-    "Se solucionó ajuste de tensión en cortinas enrollables.",
-    "Supervisión de obra finalizada, pendiente acabados.",
-    "Coordinación con residente de obra para acceso.",
-    "Confirmada fecha de entrega de material en almacén.",
-    "Cliente muy satisfecho con resultado final.",
-    "Se enviaron muestras físicas de telas con arquitecto.",
-    "Revisión de medidas finales antes de producción."
-  ];
-  const d = new Date(); d.setDate(d.getDate() - daysAgo);
-  return { id: "BIT" + Date.now().toString(36) + Math.random().toString(36).slice(2,5), fecha: d.toISOString(), usuario, tipo: rnd(tipos), descripcion: rnd(textos) };
-}
-
-window.generateDummyData = function(opts) {
-  opts = opts || {};
-  const nArq = opts.arquitectos || 80;
-  const nProy = opts.proyectos || 200;
-  const nCotiz = opts.cotizaciones || 300;
-  const nServ = opts.servicios || 200;
-  const nTareas = opts.tareas || 300;
-  const nPagos = opts.pagos || 250;
-  const bitxProy = opts.bitacoraXProy || 8;
-  const fotosXProy = opts.fotosXProy || 4;
-  const visitasXProy = opts.visitasXProy || 3;
-
-  const snap = JSON.parse(JSON.stringify(state));
-
-  // ── Arquitectos ──
-  const arqBase = snap.arquitectos.length;
-  for (let i = 0; i < nArq; i++) {
-    const idx = arqBase + i + 1;
-    const nombre = ARQ_NOMBRES[i % ARQ_NOMBRES.length] + (i >= ARQ_NOMBRES.length ? " " + Math.ceil(i/ARQ_NOMBRES.length) : "");
-    const despacho = ARQ_DESPACHOS[i % ARQ_DESPACHOS.length];
-    const activo = rndBool(0.65);
-    snap.arquitectos.push({
-      id: "A" + pad(idx),
-      nombre,
-      despacho,
-      email: nombre.toLowerCase().replace(/ /g,".")+"@"+despacho.toLowerCase().replace(/[^a-z]/g,"").slice(0,8)+".com",
-      telefono: "55" + rndInt(10000000,99999999),
-      colonia: rnd(COLONIA_CIUDAD),
-      tipoCliente: activo ? rnd(["Recurrente","Gold","Nuevo"]) : rnd(["Inactivo","Nuevo"]),
-      tags: rndBool(0.3) ? [rnd(["VIP","Premium","Referido","Repeat"])] : [],
-      notas: activo ? "Arquitecto activo, referencias excelentes." : "Sin actividad en los últimos 6 meses.",
-      fechaUltimoContacto: activo ? randomPastDate(60) : randomPastDate(365),
-      bitacora: Array.from({length: rndInt(2, 8)}, (_,k) => randomBitacoraEntry(rnd(RESPONSABLES), rndInt(5,300)))
-    });
-  }
-
-  // ── Proyectos ──
-  const proyBase = snap.proyectos.length;
-  const arqIds = snap.arquitectos.map(a => a.id);
-  for (let i = 0; i < nProy; i++) {
-    const idx = proyBase + i + 1;
-    const estadoW = Math.random();
-    let estado;
-    if (estadoW < 0.08) estado = "Lead";
-    else if (estadoW < 0.18) estado = "Cotización enviada";
-    else if (estadoW < 0.28) estado = "Cotización aprobada";
-    else if (estadoW < 0.38) estado = "Anticipo pagado";
-    else if (estadoW < 0.48) estado = "En supervisión";
-    else if (estadoW < 0.60) estado = "En instalación";
-    else if (estadoW < 0.82) estado = "Entregado";
-    else estado = "Perdido";
-
-    const monto = rndMonto(30000, 850000);
-    const costo = Math.round(monto * (0.35 + Math.random() * 0.25));
-    const idArq = rnd(arqIds);
-    const instalador = rnd(INSTALADORES);
-    const numOrdenes = rndInt(1, 4);
-    const ordenes = Array.from({length: numOrdenes}, (_, k) => {
-      const uds = rndInt(4, 30);
-      const completadas = (estado === "Entregado") ? Array.from({length:uds},(_,j)=>j+1) : (estado === "En instalación" ? Array.from({length:rndInt(0,uds)},(_,j)=>j+1) : []);
-      return { id: "OP"+Date.now().toString(36)+k+i, numero: String(2000+rndInt(0,999)), unidades: uds, unidadesCompletadas: completadas, fecha: randomPastDate(200), notas: "" };
-    });
-
-    const avances = Array.from({length: rndInt(bitxProy/2, bitxProy*2)}, (_, k) => ({
-      id: "AV"+Date.now().toString(36)+k+i,
-      fecha: new Date(Date.now() - rndInt(1,300)*86400000).toISOString(),
-      usuario: rnd(INSTALADORES),
-      tag: rnd(["avance","avance","avance","problema","avance","llegada","salida"]),
-      texto: rnd(["Instaladas " + rndInt(2,10) + " persianas en planta baja.","Se completó instalación de cortinas blackout recámara principal.","Ajuste de tensión en 3 unidades completado.","Problema con carril izquierdo, se reprograma.","Motorización funcionando al 100%.","Cliente supervisa y aprueba avance.","Pendiente instalación de 2 unidades por acceso restringido.","Se colocaron todos los brackets, listo para colgar.","Material completo en obra, inicio instalación mañana."]),
-      fotos: []
-    }));
-
-    const fotos = Array.from({length: rndInt(fotosXProy/2, fotosXProy*2)}, (_, k) => ({
-      id: "FT"+Date.now().toString(36)+k+i,
-      fecha: randomPastDate(200),
-      usuario: rnd(INSTALADORES),
-      etapa: rnd(["antes","durante","durante","despues"]),
-      descripcion: rnd(["Vista general","Detalle bracket","Persiana instalada","Prueba motorización","Cliente presente","Acabado final"]),
-      archivo: FOTO_PLACEHOLDER
-    }));
-
-    const visitas = Array.from({length: rndInt(visitasXProy, visitasXProy+3)}, (_, k) => ({
-      id: "VIS"+Date.now().toString(36)+k+i,
-      fechaHora: (rndBool(0.4) ? randomPastDate(120) : randomFutureDate(60)) + "T" + rndInt(8,17).toString().padStart(2,"0") + ":00:00",
-      duracionHoras: rnd([2,3,4,4,4,6,8]),
-      instaladores: [instalador],
-      notas: rnd(["Primera visita de medición","Instalación primer piso","Instalación segundo piso","Ajustes finales","Entrega formal","Seguimiento post-instalación",""]),
-      completada: rndBool(0.5),
-      ubicacion: rnd(COLONIA_CIUDAD)
-    }));
-
-    const bitacora = Array.from({length: rndInt(4, bitxProy*2)}, (_, k) => randomBitacoraEntry(rnd(RESPONSABLES), rndInt(1, 300)));
-
-    snap.proyectos.push({
-      id: "P" + pad(idx, 4),
-      nombre: rnd(PROY_NOMBRES) + " " + (idx),
-      idArq,
-      estado,
-      monto,
-      costo,
-      tipoObra: rnd(TIPOS_OBRA),
-      ubicacion: rnd(COLONIA_CIUDAD),
-      fechaCreacion: randomPastDate(300),
-      ultimaActualizacion: randomPastDate(30),
-      proximaAccion: rnd(["Visitar arquitecto","Enviar cotización","Cobrar saldo","Coordinar instalación","Confirmar llegada material",""]),
-      fechaProximaAccion: rndBool(0.6) ? (rndBool(0.4) ? randomPastDate(20) : randomFutureDate(30)) : "",
-      instaladorAsignado: instalador,
-      instaladoresAsignados: [instalador],
-      ordenesProduccion: ordenes,
-      bitacoraInstalacion: { avances, fotos, pendientes: [] },
-      visitasProgramadas: visitas,
-      bitacora,
-      materialSolicitado: rndBool(0.5),
-      fechaEntregaTentativa: rndBool(0.6) ? randomFutureDate(90) : "",
-      competidorPerdido: estado === "Perdido" ? rnd(["Lutron","Hunter Douglas","Decoraciones locales","Carpintero independiente"]) : "",
-      notas: rndBool(0.4) ? rnd(["Cliente muy exigente, requiere seguimiento continuo.","VIP, referido por arquitecto top.","Proyecto retrasado por obra civil.","Urgente, fecha de entrega fija.","Cliente nuevo con alto potencial.","Pendiente definir colores finales.",""]) : ""
-    });
-  }
-
-  // ── Cotizaciones ──
-  const cotizBase = snap.cotizaciones ? snap.cotizaciones.length : 0;
-  if (!snap.cotizaciones) snap.cotizaciones = [];
-  const proyIds = snap.proyectos.map(p => p.id);
-  for (let i = 0; i < nCotiz; i++) {
-    const idx = cotizBase + i + 1;
-    const estadoCotiz = rnd(["Enviada","Enviada","Aprobada","Aprobada","En revisión","Rechazada","Borrador"]);
-    snap.cotizaciones.push({
-      id: "COT" + pad(idx, 4),
-      idProy: rnd(proyIds),
-      fecha: randomPastDate(300),
-      monto: rndMonto(20000, 900000),
-      estado: estadoCotiz,
-      version: rndInt(1,3),
-      descripcion: rnd(["Persianas enrollables motorizadas","Cortinas blackout custom","Sistema de automatización Somfy","Persianas doble tela","Cortinas sheer elegance","Motorizacion completa torre","Cortinas piso a techo",""]),
-      notas: rndBool(0.3) ? "Incluye descuento por volumen del 8%." : "",
-      motivoRechazo: estadoCotiz === "Rechazada" ? rnd(["Precio alto","Cliente cambió de idea","Pospuso obra"]) : ""
-    });
-  }
-
-  // ── Servicios ──
-  const servBase = snap.servicios ? snap.servicios.length : 0;
-  if (!snap.servicios) snap.servicios = [];
-  for (let i = 0; i < nServ; i++) {
-    const idx = servBase + i + 1;
-    const tipo = rnd(TIPOSSERVICIO);
-    const estadoServ = rnd(["Abierto","Abierto","Cerrado","Cerrado","Cerrado"]);
-    snap.servicios.push({
-      id: "S" + pad(idx, 3),
-      idProy: rnd(proyIds),
-      fecha: randomPastDate(250),
-      tipo,
-      estado: estadoServ,
-      descripcion: rnd(["Persiana no baja completamente","Ajuste de tensión en blackout","Motor no responde al control","Bracket flojo en ventanal","Tela con desgaste prematuro","Rieles descuadrados","Persiana golpea al bajar","Revisión general post-instalación","Control remoto sin señal","Cortina se sale del carril"]),
-      responsable: rnd(RESPONSABLES),
-      prioridad: rnd(["alta","media","media","baja"]),
-      notas: rndBool(0.3) ? "Cliente reportó problema 2 semanas después de instalación." : "",
-      fechaCierre: estadoServ === "Cerrado" ? randomPastDate(200) : "",
-      fechaProgramada: rndBool(0.4) ? (rndBool(0.5) ? randomPastDate(30) : randomFutureDate(30)) : "",
-      horaProgramada: rndBool(0.4) ? rndInt(8,17).toString().padStart(2,"0")+":00" : "",
-      instaladorAsignado: rndBool(0.5) ? rnd(INSTALADORES) : "",
-      numeroOrden: rndBool(0.6) ? String(2000+rndInt(0,999)) : "",
-      numUnidad: rndBool(0.4) ? String(rndInt(1,20)) : "",
-      fotos: [],
-      _visitadoPendiente: rndBool(0.1)
-    });
-  }
-
-  // ── Tareas ──
-  const tarBase = snap.tareas ? snap.tareas.length : 0;
-  if (!snap.tareas) snap.tareas = [];
-  const accionesTarea = ["Llamar al arquitecto","Enviar cotización actualizada","Confirmar llegada de material","Coordinar instalación","Cobrar anticipo pendiente","Revisar avance en obra","Agendar visita de supervisión","Seguimiento a garantía abierta","Enviar muestras físicas","Confirmar fecha de entrega","Atender queja de cliente","Revisar pedido de producción","Actualizar estado del proyecto","Contactar proveedor","Preparar propuesta especial"];
-  for (let i = 0; i < nTareas; i++) {
-    const idx = tarBase + i + 1;
-    const hecha = rndBool(0.55);
-    snap.tareas.push({
-      id: "T" + pad(idx, 4),
-      idProy: rndBool(0.7) ? rnd(proyIds) : null,
-      texto: rnd(accionesTarea) + " — " + rnd(PROY_NOMBRES).toLowerCase(),
-      responsable: rnd(RESPONSABLES),
-      fechaLimite: hecha ? randomPastDate(100) : (rndBool(0.6) ? (rndBool(0.5) ? randomPastDate(10) : randomFutureDate(20)) : ""),
-      hecha,
-      fechaHecha: hecha ? randomPastDate(80) : null,
-      prioridad: rnd(["alta","media","media","baja"]),
-      notas: ""
-    });
-  }
-
-  // ── Pagos ──
-  const pagoBase = snap.pagos ? snap.pagos.length : 0;
-  if (!snap.pagos) snap.pagos = [];
-  for (let i = 0; i < nPagos; i++) {
-    const idx = pagoBase + i + 1;
-    snap.pagos.push({
-      id: "PAG" + pad(idx, 4),
-      idProy: rnd(proyIds),
-      monto: rndMonto(10000, 400000),
-      tipo: rnd(["Anticipo","Pago parcial","Saldo final","Otro"]),
-      fecha: randomPastDate(300),
-      referencia: "REF" + rndInt(100000,999999),
-      notas: rndBool(0.2) ? "Pago recibido con retraso de 5 días." : ""
-    });
-  }
-
-  // ── Prospectos ──
-  if (!snap.prospectos) snap.prospectos = [];
-  const nProsp = opts.prospectos || 60;
-  const prospBase = snap.prospectos.length;
-  for (let i = 0; i < nProsp; i++) {
-    const idx = prospBase + i + 1;
-    const etapa = rnd(["Identificado","Primer contacto","Interés inicial","Visita agendada","Visita realizada","En seguimiento","Convertido","Pausado / No interesado"]);
-    snap.prospectos.push({
-      id: "PROS" + pad(idx, 3),
-      nombre: ARQ_NOMBRES[(i + 10) % ARQ_NOMBRES.length],
-      despacho: ARQ_DESPACHOS[i % ARQ_DESPACHOS.length],
-      telefono: "55" + rndInt(10000000,99999999),
-      email: "contacto@despacho" + idx + ".mx",
-      etapa,
-      fuente: rnd(["Referido","Evento","Redes sociales","Prospección en frío","Recomendación interna"]),
-      fechaContacto: randomPastDate(200),
-      proximaAccion: rnd(["Llamar","Enviar información","Agendar cita","Dar seguimiento",""]),
-      fechaProximaAccion: rndBool(0.5) ? randomFutureDate(30) : "",
-      prioridad: rnd(["alta","media","baja"]),
-      notas: rndBool(0.3) ? "Referido por cliente VIP. Alto potencial." : "",
-      interacciones: Array.from({length: rndInt(1,5)}, () => ({
-        id: "INT"+Date.now().toString(36)+Math.random().toString(36).slice(2,5),
-        fecha: randomPastDate(150),
-        tipo: rnd(["Llamada","Visita","Correo","Reunión"]),
-        usuario: rnd(RESPONSABLES),
-        notas: rnd(["Primer contacto positivo.","Interesado en proyecto nuevo.","Solicita muestras.","Agendó visita.","No contestó.","Dejó mensaje."])
-      }))
-    });
-  }
-
-  return snap;
-};
-
-window.launchDummyData = function(preset) {
-  const presets = {
-    pequeño: { arquitectos: 20, proyectos: 50, cotizaciones: 80, servicios: 60, tareas: 100, pagos: 70, prospectos: 20, bitacoraXProy: 5, fotosXProy: 3, visitasXProy: 2 },
-    mediano: { arquitectos: 60, proyectos: 150, cotizaciones: 200, servicios: 150, tareas: 200, pagos: 180, prospectos: 50, bitacoraXProy: 8, fotosXProy: 4, visitasXProy: 3 },
-    grande:  { arquitectos: 100, proyectos: 300, cotizaciones: 400, servicios: 300, tareas: 400, pagos: 350, prospectos: 80, bitacoraXProy: 12, fotosXProy: 6, visitasXProy: 4 },
-    extremo: { arquitectos: 150, proyectos: 500, cotizaciones: 600, servicios: 500, tareas: 600, pagos: 500, prospectos: 120, bitacoraXProy: 15, fotosXProy: 8, visitasXProy: 5 }
-  };
-  const cfg = presets[preset] || presets.mediano;
-  const overlay = document.getElementById("stressOverlay");
-  if (overlay) overlay.style.display = "flex";
-  document.getElementById("stressStatus") && (document.getElementById("stressStatus").textContent = "Generando datos... espera un momento.");
-
-  setTimeout(() => {
-    try {
-      const t0 = performance.now();
-      const newState = window.generateDummyData(cfg);
-      const genMs = Math.round(performance.now() - t0);
-
-      const t1 = performance.now();
-      const json = JSON.stringify(newState);
-      const serMs = Math.round(performance.now() - t1);
-      const sizeKB = (json.length / 1024).toFixed(1);
-      const sizeMB = (json.length / 1024 / 1024).toFixed(2);
-
-      const t2 = performance.now();
-      localStorage.setItem(STORAGE_KEY, json);
-      const saveMs = Math.round(performance.now() - t2);
-
-      state = newState;
-
-      // Benchmark renders
-      const benchmarks = [];
-      const views = ["dashboard","comercial","proyectos","instalacion","servicios","arquitectos","cotizaciones","agenda"];
-      const c = document.getElementById("content");
-      for (const v of views) {
-        const was = currentView;
-        currentView = v;
-        const rt = performance.now();
-        try { render(); } catch(e) {}
-        const renderMs = Math.round(performance.now() - rt);
-        benchmarks.push({ view: v, ms: renderMs });
-        currentView = was;
-      }
-      render();
-
-      // Memory estimate
-      const memMB = performance.memory ? (performance.memory.usedJSHeapSize / 1024 / 1024).toFixed(1) : "N/D";
-
-      const pCount = newState.proyectos.length;
-      const aCount = newState.arquitectos.length;
-      const sCount = (newState.servicios||[]).length;
-      const tCount = (newState.tareas||[]).length;
-      const cCount = (newState.cotizaciones||[]).length;
-
-      if (overlay) overlay.style.display = "none";
-
-      // Show report modal
-      document.getElementById("modal").classList.remove("wide");
-      document.getElementById("modal").classList.add("wide");
-      document.getElementById("modalTitle").textContent = "📊 Resultados del Stress Test";
-      const slow = benchmarks.filter(b => b.ms > 500);
-      const warn = benchmarks.filter(b => b.ms > 200 && b.ms <= 500);
-      document.getElementById("modalBody").innerHTML = `
-        <div style="font-size:13px;">
-          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px;">
-            <div style="background:#E8F5E9;padding:12px;border-radius:8px;text-align:center;">
-              <div style="font-size:22px;font-weight:800;color:#2E7D32;">${pCount}</div><div style="font-size:11px;color:var(--gray);">Proyectos</div>
-            </div>
-            <div style="background:#E8F5E9;padding:12px;border-radius:8px;text-align:center;">
-              <div style="font-size:22px;font-weight:800;color:#2E7D32;">${aCount}</div><div style="font-size:11px;color:var(--gray);">Arquitectos</div>
-            </div>
-            <div style="background:#E8F5E9;padding:12px;border-radius:8px;text-align:center;">
-              <div style="font-size:22px;font-weight:800;color:#2E7D32;">${sCount}</div><div style="font-size:11px;color:var(--gray);">Servicios</div>
-            </div>
-            <div style="background:#E3F2FD;padding:12px;border-radius:8px;text-align:center;">
-              <div style="font-size:22px;font-weight:800;color:#1565C0;">${tCount}</div><div style="font-size:11px;color:var(--gray);">Tareas</div>
-            </div>
-            <div style="background:#E3F2FD;padding:12px;border-radius:8px;text-align:center;">
-              <div style="font-size:22px;font-weight:800;color:#1565C0;">${cCount}</div><div style="font-size:11px;color:var(--gray);">Cotizaciones</div>
-            </div>
-            <div style="background:${parseFloat(sizeMB)>3?'#FFEBEE':'#FFF8E1'};padding:12px;border-radius:8px;text-align:center;">
-              <div style="font-size:22px;font-weight:800;color:${parseFloat(sizeMB)>3?'#C62828':'#E65100'};">${sizeMB} MB</div><div style="font-size:11px;color:var(--gray);">Storage usado</div>
-            </div>
-          </div>
-
-          <div style="background:#F5F5F5;border-radius:8px;padding:12px;margin-bottom:14px;">
-            <div style="font-weight:700;margin-bottom:8px;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">⚡ Tiempos de generación</div>
-            <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:12px;">
-              <span>🏗 Generación: <strong>${genMs}ms</strong></span>
-              <span>📦 Serialización: <strong>${serMs}ms</strong></span>
-              <span>💾 Guardado: <strong>${saveMs}ms</strong></span>
-              <span>🧠 Memoria JS: <strong>${memMB} MB</strong></span>
-            </div>
-          </div>
-
-          <div style="margin-bottom:14px;">
-            <div style="font-weight:700;margin-bottom:8px;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">🖥 Benchmark de renders</div>
-            <table style="width:100%;border-collapse:collapse;font-size:12px;">
-              <thead><tr style="background:#F5F5F5;">
-                <th style="padding:6px 8px;text-align:left;">Vista</th>
-                <th style="padding:6px 8px;text-align:right;">Tiempo</th>
-                <th style="padding:6px 8px;text-align:left;">Estado</th>
-              </tr></thead>
-              <tbody>
-                ${benchmarks.map(b => {
-                  const color = b.ms > 500 ? '#FFEBEE' : b.ms > 200 ? '#FFF3E0' : '#F1F8E9';
-                  const badge = b.ms > 500 ? '🔴 Lento' : b.ms > 200 ? '🟡 Advertencia' : '🟢 OK';
-                  return `<tr style="background:${color};border-bottom:1px solid #eee;">
-                    <td style="padding:6px 8px;font-weight:600;">${b.view}</td>
-                    <td style="padding:6px 8px;text-align:right;font-weight:700;font-family:monospace;">${b.ms}ms</td>
-                    <td style="padding:6px 8px;">${badge}</td>
-                  </tr>`;
-                }).join('')}
-              </tbody>
-            </table>
-          </div>
-
-          ${slow.length > 0 ? `
-          <div style="background:#FFEBEE;border:1px solid #EF9A9A;border-radius:8px;padding:12px;margin-bottom:10px;">
-            <strong style="color:#C62828;">🔴 VISTAS LENTAS (>${'500ms'}):</strong>
-            <div style="margin-top:4px;font-size:12px;color:#B71C1C;">${slow.map(b=>b.view+' ('+b.ms+'ms)').join(' · ')} — Requieren paginación urgente antes de producción.</div>
-          </div>` : ''}
-
-          ${parseFloat(sizeMB) > 3 ? `
-          <div style="background:#FFF3E0;border:1px solid #FFCC02;border-radius:8px;padding:12px;">
-            <strong style="color:#E65100;">⚠ ADVERTENCIA DE STORAGE:</strong>
-            <div style="margin-top:4px;font-size:12px;color:#BF360C;">El estado ocupa ${sizeMB}MB. Con fotos reales en base64, el límite de localStorage (5-10MB) se alcanzará rápidamente. Externalizar fotos es CRÍTICO antes de producción.</div>
-          </div>` : `
-          <div style="background:#E8F5E9;border:1px solid #A5D6A7;border-radius:8px;padding:12px;">
-            <strong style="color:#2E7D32;">✅ STORAGE OK:</strong>
-            <div style="margin-top:4px;font-size:12px;color:#1B5E20;">Con datos de texto puro el sistema está dentro del límite. El riesgo real son las fotos base64.</div>
-          </div>`}
-        </div>
-      `;
-      document.getElementById("modalFooter").innerHTML = `
-        <button class="btn btn-secondary" onclick="closeModal()">Cerrar</button>
-        <button class="btn btn-secondary" style="color:var(--red);border-color:var(--red);" onclick="if(confirm('¿Borrar todos los datos de prueba y volver al estado original?')){resetData();closeModal();}">🗑 Limpiar datos de prueba</button>
-      `;
-      document.getElementById("modalOverlay").classList.add("open");
-
-    } catch(e) {
-      if (overlay) overlay.style.display = "none";
-      alert("Error en stress test: " + e.message + "\n\nPosiblemente QuotaExceededError — localStorage lleno. Esto confirma el riesgo crítico de storage.");
-      console.error(e);
-    }
-  }, 100);
-};
-})();
-
-// ╔══════════════════════════════════════════════════════╗
-// ║  END V3 BIRD & HOCKNEY                              ║
-// ╚══════════════════════════════════════════════════════╝
-
 
 </script>
-
-<!-- V3 OVERLAYS & COMPONENTS -->
-<!-- Firma Digital -->
-<div class="v2-firma-overlay" id="v2FirmaOverlay"><div class="v2-firma-modal"><h3>✍️ Firma de conformidad</h3><canvas class="v2-firma-canvas" id="v2FirmaCanvas" width="380" height="180"></canvas><div class="v2-firma-actions"><button class="btn btn-secondary btn-sm" onclick="v2FirmaLimpiar()">Limpiar</button><button class="btn btn-secondary btn-sm" onclick="v2FirmaClose()">Cancelar</button><button class="btn btn-primary btn-sm" onclick="v2FirmaGuardar()">Guardar firma</button></div></div></div>
-<!-- Instalacion Action Bar -->
-<div class="v3-inst-action-bar" id="v3InstActionBar">
-  <button class="v3-act-btn v3-act-btn-foto" onclick="v3QuickFoto()"><span class="v3-act-btn-icon">📸</span>Foto</button>
-  <button class="v3-act-btn v3-act-btn-avance" onclick="v3QuickAvance()"><span class="v3-act-btn-icon">✏️</span>Avance</button>
-  <button class="v3-act-btn v3-act-btn-pendiente" onclick="v3QuickPendiente()"><span class="v3-act-btn-icon">⚠️</span>Pendiente</button>
-</div>
-<!-- END V3 OVERLAYS -->
 </body>
 </html>
