@@ -5414,15 +5414,56 @@ function renderBitAvances(p) {
           <button class="icon-btn danger" onclick="deleteAvance('${p.id}', '${a.id}')" title="Eliminar avance">×</button>
         </div>
         ${a.texto ? `<div style="font-size: 13px; color: var(--navy); white-space: pre-wrap; margin-bottom: 4px;">${escape(a.texto)}</div>` : ""}
-        ${(a._unidades && a._unidades.length > 0) ? `
-          <div style="margin-top: 6px; display: flex; flex-direction: column; gap: 4px;">
-            ${a._unidades.map(u => `
-              <div style="background: #E8F5E9; border-radius: 6px; padding: 4px 8px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
-                <span style="font-size: 11px; font-weight: 700; color: #1B5E20;">📦 ${escape(u.orden)}</span>
-                <span style="font-size: 11px; color: #388E3C;">${u.unidades.length}/${u.total} unidades instaladas</span>
-                <span style="font-size: 11px; color: #2E7D32; background: white; border-radius: 4px; padding: 1px 6px; border: 1px solid #A5D6A7;">u${u.unidades.join(", ")}</span>
-              </div>`).join("")}
-          </div>` : ""}
+        ${(() => {
+          // Datos guardados directamente en el avance (nuevo sistema)
+          if (a._unidades && a._unidades.length > 0) {
+            return `<div style="margin-top: 6px; display: flex; flex-direction: column; gap: 4px;">
+              ${a._unidades.map(u => {
+                const esServicio = u._esServicio;
+                const bg = esServicio ? "#FFF3E0" : "#E8F5E9";
+                const color = esServicio ? "#E65100" : "#1B5E20";
+                const chipBg = esServicio ? "#FF6D00" : "#2E7D32";
+                const label = esServicio ? "🔧 servicio" : `${u.unidades.length}/${u.total} instaladas`;
+                return `<div style="background:${bg};border-radius:6px;padding:4px 8px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+                  <span style="font-size:11px;font-weight:700;color:${color};">📦 ${escape(u.orden)}</span>
+                  <span style="font-size:11px;color:${color};">${label}</span>
+                  <span style="font-size:11px;color:white;background:${chipBg};border-radius:4px;padding:1px 6px;">u${u.unidades.join(", ")}</span>
+                </div>`;
+              }).join("")}
+            </div>
+            ${(() => {
+              if (!a._tiempoMins) return "";
+              const totalUds = a._unidades.reduce((s, u) => s + u.unidades.length, 0);
+              const h = Math.floor(a._tiempoMins / 60), m = a._tiempoMins % 60;
+              const tiempoStr = h > 0 ? `${h}h ${m}m` : `${m} min`;
+              const promStr = totalUds > 0 ? (() => {
+                const pMins = a._tiempoMins / totalUds;
+                return pMins >= 60
+                  ? `${Math.floor(pMins/60)}h ${Math.round(pMins%60)}m`
+                  : `${Math.round(pMins)} min`;
+              })() : null;
+              return `<div style="margin-top:5px;display:flex;gap:8px;flex-wrap:wrap;">
+                <span style="font-size:11px;color:var(--gray);background:var(--gray-light);border-radius:4px;padding:2px 7px;">⏱ ${tiempoStr} en obra</span>
+                ${promStr && totalUds > 1 ? `<span style="font-size:11px;color:var(--gray);background:var(--gray-light);border-radius:4px;padding:2px 7px;">≈ ${promStr} / persiana</span>` : ""}
+              </div>`;
+            })()}
+          }
+          // Fallback: buscar en p.bitacora el entry de la misma fecha/usuario (avances guardados antes de este sistema)
+          if (a.tag === "avance" || a.tag === "ajuste") {
+            const match = (p.bitacora || []).find(b =>
+              b.tipo === "accion" && b.usuario === a.usuario &&
+              Math.abs(new Date(b.fecha) - new Date(a.fecha)) < 5000 &&
+              b.descripcion && b.descripcion.includes("📦")
+            );
+            if (match) {
+              const partes = match.descripcion.match(/📦[^·]+/g);
+              if (partes) {
+                return `<div style="margin-top:5px;font-size:11px;color:#388E3C;background:#E8F5E9;border-radius:6px;padding:4px 8px;">${partes.map(p=>p.trim()).join(" · ")}</div>`;
+              }
+            }
+          }
+          return "";
+        })()}
         ${(a.fotos && a.fotos.length > 0) ? `<div style="display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap;">
           ${a.fotos.map(idFoto => {
             const foto = (p.bitacoraInstalacion.fotos || []).find(f => f.id === idFoto);
@@ -5782,26 +5823,48 @@ async function submitAvance() {
     }
   });
 
+  // Incluir también las unidades rojas (van a servicio) en el resumen del avance
+  const _flaggedParaResumen = {};
+  (window._avanceFlagged || new Set()).forEach(key => {
+    const parts = key.split("|");
+    if (parts[0] === p.id) {
+      const fOrden = parts[1], fNum = parseInt(parts[2]);
+      const ord = (p.ordenesProduccion || []).find(o => o.id === fOrden);
+      const ordNum = ord ? ord.numero : fOrden;
+      if (!_flaggedParaResumen[ordNum]) _flaggedParaResumen[ordNum] = { orden: ordNum, unidades: [], total: ord ? (ord.unidades||0) : 0, _esServicio: true };
+      _flaggedParaResumen[ordNum].unidades.push(fNum);
+    }
+  });
+  const _unidadesConServicio = [..._unidadesNuevas];
+  Object.values(_flaggedParaResumen).forEach(r => { r.unidades.sort((a,b)=>a-b); _unidadesConServicio.push(r); });
+
   // Guardar unidades instaladas en el entry de bitácora recién creado
-  if (_unidadesNuevas.length > 0 && p.bitacoraInstalacion.avances.length > 0) {
-    p.bitacoraInstalacion.avances[0]._unidades = _unidadesNuevas;
+  if (_unidadesConServicio.length > 0 && p.bitacoraInstalacion.avances.length > 0) {
+    p.bitacoraInstalacion.avances[0]._unidades = _unidadesConServicio;
   }
 
   // 2. Tiempo activo desde última llegada sin salida (del usuario actual)
   let _tiempoStr = null;
   const _bitAvs = (p.bitacoraInstalacion && p.bitacoraInstalacion.avances) || [];
   const _llegadas = _bitAvs.filter(a => a.tag === "llegada" && a.usuario === usuario).sort((a, b) => b.fecha.localeCompare(a.fecha));
+  let _tiempoMins = 0;
   if (_llegadas.length > 0) {
     const _ultima = _llegadas[0];
     const _salidas = _bitAvs.filter(a => a.tag === "salida" && a.usuario === usuario && a.fecha > _ultima.fecha);
     if (_salidas.length === 0) {
       const _mins = Math.round((Date.now() - new Date(_ultima.fecha)) / 60000);
       if (_mins > 0 && _mins < 1440) {
+        _tiempoMins = _mins;
         const _h = Math.floor(_mins / 60);
         const _m = _mins % 60;
         _tiempoStr = _h > 0 ? `${_h}h ${_m}m` : `${_m} min`;
       }
     }
+  }
+
+  // Guardar tiempo en el avance
+  if (_tiempoMins > 0 && p.bitacoraInstalacion.avances.length > 0) {
+    p.bitacoraInstalacion.avances[0]._tiempoMins = _tiempoMins;
   }
 
   // 3. Construir descripción enriquecida
