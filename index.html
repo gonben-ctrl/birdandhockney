@@ -13517,6 +13517,39 @@ function openServicioModal(id, idProyDefault) {
       ${(() => {
         const proyServ = findProy(s.idProy);
         const ordenes = (proyServ && proyServ.ordenesProduccion) || [];
+        const partidas = Array.isArray(s.partidas) && s.partidas.length > 0 ? s.partidas : null;
+
+        if (partidas) {
+          // Servicio con múltiples partidas (auto-generado desde avance)
+          // Agrupar por orden para mostrar más limpio
+          const porOrden = {};
+          partidas.forEach(pt => {
+            const key = pt.orden || pt.idOrden || "—";
+            if (!porOrden[key]) porOrden[key] = [];
+            porOrden[key].push(pt.numUnidad);
+          });
+          return `
+            <div class="field full">
+              <label>📦 Partidas / Unidades del servicio</label>
+              <div style="background: var(--navy-light); border-radius: 8px; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px;">
+                ${Object.entries(porOrden).map(([orden, nums]) => `
+                  <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                    <span style="font-size: 12px; font-weight: 700; color: var(--navy); min-width: 80px;">Orden ${escape(orden)}</span>
+                    <div style="display: flex; gap: 4px; flex-wrap: wrap;">
+                      ${nums.sort((a,b)=>a-b).map(n => `<span style="background: var(--navy); color: white; border-radius: 4px; padding: 2px 7px; font-size: 12px; font-weight: 700;">u${n}</span>`).join("")}
+                    </div>
+                    <span style="font-size: 11px; color: var(--gray);">${nums.length} unidad${nums.length !== 1 ? "es" : ""}</span>
+                  </div>`).join("")}
+              </div>
+              <div class="hint">${partidas.length} unidad${partidas.length !== 1 ? "es" : ""} pendiente${partidas.length !== 1 ? "s" : ""} de instalación.</div>
+              <input type="hidden" id="f-idOrdenAsociada" value="${escape(s.idOrdenAsociada || "")}">
+              <input type="hidden" id="f-numeroOrden" value="${escape(s.numeroOrden || "")}">
+              <input type="hidden" id="f-numUnidad" value="${escape(s.numUnidad || "")}">
+            </div>
+          `;
+        }
+
+        // Servicio manual — campos normales
         const ordenSel = ordenes.find(o => o.id === s.idOrdenAsociada);
         const maxUd = ordenSel ? (ordenSel.unidades || 1) : 999;
         return `
@@ -13559,15 +13592,9 @@ function openServicioModal(id, idProyDefault) {
       <div class="field full"><label>Descripción del problema/solicitud *</label>
         <textarea id="f-descripcion" placeholder="Ej. Motor de cortina principal hace ruido al subir. Cliente solicita revisión." autofocus>${escape(s.descripcion || "")}</textarea>
       </div>
-      <div class="field"><label>Responsable</label>
-        <select id="f-responsable">${getCustomList("responsables").map(r => `<option ${s.responsable === r ? "selected" : ""}>${r}</option>`).join("")}</select>
-      </div>
-      <div class="field"><label>Fecha de cierre <span style="font-size: 11px; color: var(--gray); font-weight: 400;">(si ya cerró)</span></label>
-        <input id="f-fechaCierre" type="date" value="${s.fechaCierre || ""}">
-      </div>
-      <div class="field full"><label>Notas / resolución</label>
-        <textarea id="f-notas" placeholder="Detalles, acciones tomadas, próximos pasos…">${escape(s.notas || "")}</textarea>
-      </div>
+      <input type="hidden" id="f-responsable" value="${escape(s.responsable || "")}">
+      <input type="hidden" id="f-fechaCierre" value="${escape(s.fechaCierre || "")}">
+      <input type="hidden" id="f-notas" value="${escape(s.notas || "")}">
       <div class="field full">
         <label>Fotos del servicio (antes / después / referencias)</label>
         <div style="display: flex; gap: 8px; flex-wrap: wrap;">
@@ -13950,16 +13977,16 @@ function renderConfig() {
       })()}
     </div>
     <div class="dash-row-3">
+      ${editList("🔧 Tipos de servicio", "tiposServicio")}
       ${editList("Motivos de pérdida", "motivosPerdido")}
+    </div>
+    <div class="dash-row-3">
       ${editList("Tipos de obra", "tiposObra")}
-    </div>
-    <div class="dash-row-3">
       ${editList("Tipos de muestrario", "tiposMuestrario")}
-      ${editList("Tags / Etiquetas", "tagsDisponibles")}
     </div>
     <div class="dash-row-3">
+      ${editList("Tags / Etiquetas", "tagsDisponibles")}
       ${editList("Competidores conocidos", "competidoresConocidos")}
-      <div></div>
     </div>
     <div class="card" style="margin-top: 16px;">
       <div class="card-header"><div class="card-title">👷 Roles: Instaladores</div></div>
@@ -14110,8 +14137,19 @@ function renderServicioDetail() {
           ${field("Fecha apertura", fmtDate(s.fecha))}
           ${s.fechaLimite ? field("Fecha límite", fmtDate(s.fechaLimite), "color:var(--red);") : ""}
           ${s.fechaCierre ? field("Fecha cierre", fmtDate(s.fechaCierre), "color:var(--green);") : ""}
-          ${orden ? field("Orden de producción", escape(orden.numero)+(s.numUnidad?" · #"+escape(s.numUnidad):"")) : ""}
-          ${s.numeroOrden ? field("Folio", escape(s.numeroOrden)) : ""}
+          ${(Array.isArray(s.partidas) && s.partidas.length > 0) ? (() => {
+            const porOrden = {};
+            s.partidas.forEach(pt => {
+              const k = pt.orden || pt.idOrden || "—";
+              if (!porOrden[k]) porOrden[k] = [];
+              porOrden[k].push(pt.numUnidad);
+            });
+            const resumen = Object.entries(porOrden).map(([ord, nums]) =>
+              `<div style="margin-bottom:4px;"><span style="font-weight:700;">Orden ${escape(ord)}:</span> ${nums.sort((a,b)=>a-b).map(n=>`<span style="background:var(--navy);color:white;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:700;margin-left:3px;">u${n}</span>`).join("")} <span style="font-size:11px;color:var(--gray);margin-left:4px;">(${nums.length} ud${nums.length!==1?"s":""})</span></div>`
+            ).join("");
+            return `<div style="grid-column:1/-1;margin-bottom:14px;"><div style="font-size:10px;color:var(--gray);text-transform:uppercase;font-weight:700;letter-spacing:0.8px;margin-bottom:6px;">📦 Partidas / Unidades (${s.partidas.length})</div><div style="font-size:13px;color:var(--navy);">${resumen}</div></div>`;
+          })() : orden ? field("Orden de producción", escape(orden.numero)+(s.numUnidad?" · #"+escape(s.numUnidad):"")) : ""}
+          ${(!Array.isArray(s.partidas) || s.partidas.length === 0) && s.numeroOrden ? field("Folio", escape(s.numeroOrden)) : ""}
         </div>
       </div>
     </div>
