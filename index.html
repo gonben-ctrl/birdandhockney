@@ -3461,15 +3461,22 @@ function renderInstalacionDetail() {
       const servsPend = (state.servicios || []).filter(sv => sv.idProy === p.id && sv._esInstalacionPendiente && sv.estado !== "Cerrado");
       if (servsPend.length === 0) return "";
       return `<div style="background:#FFF8E1;border:1.5px solid #F9A825;border-radius:12px;padding:12px 14px;margin-bottom:12px;">
-        <div style="font-size:12px;font-weight:700;color:#E65100;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">🔧 Servicios pendientes (${servsPend.length})</div>
+        <div style="font-size:12px;font-weight:700;color:#E65100;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">🔧 Servicio(s) pendiente(s) — ${servsPend.reduce((s,sv)=>s+(Array.isArray(sv.partidas)&&sv.partidas.length>0?sv.partidas.length:1),0)} unidad(es)</div>
         ${servsPend.map(sv => {
           const fecha = sv.fechaProgramada ? new Date(sv.fechaProgramada + "T" + (sv.horaProgramada || "09:00")).toLocaleDateString("es-MX", { weekday: "short", day: "2-digit", month: "short" }) + " · " + (sv.horaProgramada || "09:00") : "Sin fecha";
-          return `<div style="background:white;border-radius:8px;padding:8px 10px;margin-bottom:6px;border-left:3px solid #F9A825;display:flex;align-items:center;justify-content:space-between;gap:8px;">
-            <div>
-              <div style="font-size:12px;font-weight:700;color:var(--navy);">${escape(sv.descripcion)}</div>
-              <div style="font-size:11px;color:var(--gray);margin-top:2px;">📅 ${fecha}${sv.instaladorAsignado ? " · 👷 " + escape(sv.instaladorAsignado) : ""}</div>
+          const partidas = Array.isArray(sv.partidas) && sv.partidas.length > 0 ? sv.partidas : [];
+          const partidasHtml = partidas.length > 0
+            ? `<div style="margin-top:5px;display:flex;flex-direction:column;gap:2px;">${partidas.map(pt=>`<div style="font-size:11px;color:var(--navy);background:#FFF3E0;border-radius:4px;padding:2px 7px;display:inline-block;width:fit-content;">📦 Orden ${escape(pt.orden)} · Unidad ${pt.numUnidad}</div>`).join("")}</div>`
+            : `<div style="font-size:11px;color:var(--gray);margin-top:2px;">${escape(sv.descripcion)}</div>`;
+          return `<div style="background:white;border-radius:8px;padding:8px 10px;margin-bottom:6px;border-left:3px solid #F9A825;">
+            <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;">
+              <div style="flex:1;min-width:0;">
+                <div style="font-size:12px;font-weight:700;color:var(--navy);">${partidas.length > 0 ? partidas.length + ' unidad(es) pendiente(s)' : escape(sv.descripcion)}</div>
+                ${partidasHtml}
+                <div style="font-size:11px;color:var(--gray);margin-top:4px;">📅 ${fecha}${sv.instaladorAsignado ? " · 👷 " + escape(sv.instaladorAsignado) : ""}</div>
+              </div>
+              <span style="font-size:10px;font-weight:700;color:#E65100;background:#FFF3E0;padding:2px 7px;border-radius:8px;white-space:nowrap;flex-shrink:0;">${escape(sv.id)}</span>
             </div>
-            <span style="font-size:10px;font-weight:700;color:#E65100;background:#FFF3E0;padding:2px 7px;border-radius:8px;white-space:nowrap;">${escape(sv.id)}</span>
           </div>`;
         }).join("")}
       </div>`;
@@ -5814,37 +5821,45 @@ async function submitAvance() {
       return true;
     });
     if (todasListas) {
-      // Generar una orden de servicio por cada unidad roja
+      // Generar UN SOLO servicio con todas las unidades como partidas
       if (!Array.isArray(state.servicios)) state.servicios = [];
       const _manana = new Date(); _manana.setDate(_manana.getDate() + 1);
       const _fechaManana = _manana.toISOString().slice(0, 10);
       const _instaladorProy = (p.instaladoresAsignados && p.instaladoresAsignados[0]) || "";
+      const _partidas = [];
       ordenes.forEach(o => {
-        (flaggedByOrden[o.id] || []).forEach(num => {
-          state.servicios.push({
-            id: nextServicioId(),
-            idProy: p.id,
-            fecha: today(),
-            tipo: "Pendiente instalación",
-            descripcion: `Unidad ${num} de orden ${o.numero} — pendiente de instalar`,
-            responsable: (p.responsables && p.responsables[0]) || "",
-            estado: "Abierto",
-            fechaCierre: "",
-            notas: "",
-            prioridad: "alta",
-            fechaLimite: "",
-            fotos: [],
-            numeroOrden: o.numero,
-            idOrdenAsociada: o.id,
-            numUnidad: num,
-            fechaProgramada: _fechaManana,
-            horaProgramada: "09:00",
-            instaladorAsignado: _instaladorProy,
-            _esInstalacionPendiente: true
-          });
-          serviciosGenerados++;
+        (flaggedByOrden[o.id] || []).sort((a,b)=>a-b).forEach(num => {
+          _partidas.push({ orden: o.numero, idOrden: o.id, numUnidad: num });
         });
       });
+      const _resumen = Object.entries(flaggedByOrden).map(([idOrden, nums]) => {
+        const ord = ordenes.find(o => o.id === idOrden);
+        return `${ord ? ord.numero : idOrden}: u${[...nums].sort((a,b)=>a-b).join(", ")}`;
+      }).join(" / ");
+      const _primera = _partidas[0] || {};
+      state.servicios.push({
+        id: nextServicioId(),
+        idProy: p.id,
+        fecha: today(),
+        tipo: "Pendiente instalación",
+        descripcion: `${totalFlagged} unidad(es) pendiente(s) — ${_resumen}`,
+        partidas: _partidas,
+        numeroOrden: _primera.orden || "",
+        idOrdenAsociada: _primera.idOrden || "",
+        numUnidad: _primera.numUnidad ? String(_primera.numUnidad) : "",
+        responsable: (p.responsables && p.responsables[0]) || "",
+        estado: "Abierto",
+        fechaCierre: "",
+        notas: "",
+        prioridad: "alta",
+        fechaLimite: "",
+        fotos: [],
+        fechaProgramada: _fechaManana,
+        horaProgramada: "09:00",
+        instaladorAsignado: _instaladorProy,
+        _esInstalacionPendiente: true
+      });
+      serviciosGenerados++;
       // NO marcar como Entregado — quedan unidades pendientes de servicio
       // Solo quitar de agenda marcando visitas como completadas
       p._pendienteServicio = true;
@@ -14396,19 +14411,25 @@ function confirmarCierreServicio(idServ) {
   document.getElementById("modalOverlay").classList.add("open");
 }
 function marcarUnidadDeServicio(serv) {
-  // Si el servicio era de instalación pendiente, marcar su unidad como completada al cerrarlo
+  // Si el servicio era de instalación pendiente, marcar unidades como completadas al cerrarlo
   if (!serv || !serv._esInstalacionPendiente) return;
   const p = findProy(serv.idProy);
   if (!p) return;
-  const orden = (p.ordenesProduccion || []).find(o => o.id === serv.idOrdenAsociada);
-  if (!orden) return;
-  if (!Array.isArray(orden.unidadesCompletadas)) orden.unidadesCompletadas = [];
-  const num = parseInt(serv.numUnidad);
-  if (!isNaN(num) && !orden.unidadesCompletadas.find(u => u.num === num)) {
-    orden.unidadesCompletadas.push({ num, fecha: today(), usuario: getCurrentUser() || "Sistema" });
-    if (!p.bitacora) p.bitacora = [];
-    p.bitacora.unshift({ fecha: nowIso(), usuario: getCurrentUser() || "Sistema", tipo: "hecha", descripcion: `Unidad ${num} de orden ${orden.numero} completada al cerrar servicio ${serv.id}` });
-  }
+  // Soporte para partidas múltiples y para campo legacy numUnidad
+  const items = (Array.isArray(serv.partidas) && serv.partidas.length > 0)
+    ? serv.partidas
+    : [{ idOrden: serv.idOrdenAsociada, numUnidad: serv.numUnidad }];
+  items.forEach(item => {
+    const orden = (p.ordenesProduccion || []).find(o => o.id === item.idOrden);
+    if (!orden) return;
+    if (!Array.isArray(orden.unidadesCompletadas)) orden.unidadesCompletadas = [];
+    const num = parseInt(item.numUnidad);
+    if (!isNaN(num) && !orden.unidadesCompletadas.find(u => u.num === num)) {
+      orden.unidadesCompletadas.push({ num, fecha: today(), usuario: getCurrentUser() || "Sistema" });
+      if (!p.bitacora) p.bitacora = [];
+      p.bitacora.unshift({ fecha: nowIso(), usuario: getCurrentUser() || "Sistema", tipo: "hecha", descripcion: `Unidad ${num} de orden ${orden.numero} completada al cerrar servicio ${serv.id}` });
+    }
+  });
 }
 function cerrarServicioDefinitivo(idServ) {
   var s = (state.servicios || []).find(function(x){ return x.id === idServ; });
