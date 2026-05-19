@@ -3440,19 +3440,6 @@ function renderInstalacionDetail() {
           <span class="idet-action-text">Registrar llegada</span>
         </button>`
       }
-      <label class="idet-action idet-action-primary" for="qp-det-${p.id}">
-        <span class="idet-action-ico">📸</span>
-        <span class="idet-action-text">Tomar foto</span>
-        <input type="file" id="qp-det-${p.id}" accept="image/*" capture="environment" multiple onchange="quickPhotoUpload('${p.id}', this)" style="display: none;">
-      </label>
-      <button class="idet-action idet-action-soft" onclick="openAvanceModal('${p.id}')">
-        <span class="idet-action-ico">📋</span>
-        <span class="idet-action-text">Avance</span>
-      </button>
-      <button class="idet-action idet-action-soft" onclick="openServicioModal(null, '${p.id}')">
-        <span class="idet-action-ico">⚠</span>
-        <span class="idet-action-text">Pendiente</span>
-      </button>
     </div>
 
     ${!currentUserIsInstalador() && getInstaladores().length > 0 ? `
@@ -3469,6 +3456,24 @@ function renderInstalacionDetail() {
         </div>
       </details>
     ` : ""}
+
+    ${(() => {
+      const servsPend = (state.servicios || []).filter(sv => sv.idProy === p.id && sv._esInstalacionPendiente && sv.estado !== "Cerrado");
+      if (servsPend.length === 0) return "";
+      return `<div style="background:#FFF8E1;border:1.5px solid #F9A825;border-radius:12px;padding:12px 14px;margin-bottom:12px;">
+        <div style="font-size:12px;font-weight:700;color:#E65100;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">🔧 Servicios pendientes (${servsPend.length})</div>
+        ${servsPend.map(sv => {
+          const fecha = sv.fechaProgramada ? new Date(sv.fechaProgramada + "T" + (sv.horaProgramada || "09:00")).toLocaleDateString("es-MX", { weekday: "short", day: "2-digit", month: "short" }) + " · " + (sv.horaProgramada || "09:00") : "Sin fecha";
+          return `<div style="background:white;border-radius:8px;padding:8px 10px;margin-bottom:6px;border-left:3px solid #F9A825;display:flex;align-items:center;justify-content:space-between;gap:8px;">
+            <div>
+              <div style="font-size:12px;font-weight:700;color:var(--navy);">${escape(sv.descripcion)}</div>
+              <div style="font-size:11px;color:var(--gray);margin-top:2px;">📅 ${fecha}${sv.instaladorAsignado ? " · 👷 " + escape(sv.instaladorAsignado) : ""}</div>
+            </div>
+            <span style="font-size:10px;font-weight:700;color:#E65100;background:#FFF3E0;padding:2px 7px;border-radius:8px;white-space:nowrap;">${escape(sv.id)}</span>
+          </div>`;
+        }).join("")}
+      </div>`;
+    })()}
 
     <div class="idet-tabs">
       <button class="idet-tab ${tabActual === "avances" ? "active" : ""}" onclick="setBitTab('avances')">
@@ -4291,8 +4296,9 @@ async function registrarLlegada(idProy) {
 }
 
 function registrarSalida(idProy) {
-  // Salida no requiere validacion GPS (el trabajador puede haberse movido al irse)
-  return registrarAsistencia(idProy, "salida", null);
+  // Siempre pedir avance antes de registrar la salida
+  window._salidaDespuesDeAvance = idProy;
+  openAvanceModal(idProy);
 }
 
 function openOverrideUbicacionModal(idProy, distancia, gpsData) {
@@ -4357,6 +4363,21 @@ function registrarAsistencia(idProy, tipo, gpsData) {
     gps: gpsData || null
   });
   p.ultimaActualizacion = today();
+  // Vincular llegada a la visita programada más cercana (para reporte de puntualidad)
+  if (tipo === "llegada" && Array.isArray(p.visitasProgramadas)) {
+    const ahoraNow = ahora.getTime();
+    const sinCheckin = p.visitasProgramadas.filter(v => !v.horaLlegada);
+    if (sinCheckin.length > 0) {
+      sinCheckin.sort((a, b) => Math.abs(new Date(a.fechaHora).getTime() - ahoraNow) - Math.abs(new Date(b.fechaHora).getTime() - ahoraNow));
+      const visitaCercana = sinCheckin[0];
+      const diffMs = Math.abs(new Date(visitaCercana.fechaHora).getTime() - ahoraNow);
+      if (diffMs <= 8 * 60 * 60 * 1000) { // dentro de 8h de la visita programada
+        visitaCercana.horaLlegada = fechaIso;
+        visitaCercana.llegadaUsuario = usuario;
+        visitaCercana.minutosRetraso = Math.round((ahoraNow - new Date(visitaCercana.fechaHora).getTime()) / 60000);
+      }
+    }
+  }
   if (!p.bitacora) p.bitacora = [];
   p.bitacora.unshift({
     fecha: fechaIso,
@@ -4869,9 +4890,12 @@ function renderPuntualidad() {
 
   // Recolectar TODOS los check-ins de todos los proyectos
   const checkins = [];
+  const _visitasIds = new Set(); // para no duplicar
   (state.proyectos || []).forEach(p => {
+    // Fuente 1: visitas programadas con horaLlegada (registros nuevos)
     (p.visitasProgramadas || []).forEach(v => {
       if (!v.horaLlegada) return;
+      _visitasIds.add(p.id + "_" + v.horaLlegada);
       const d = new Date(v.horaLlegada);
       checkins.push({
         idProy: p.id,
@@ -4882,6 +4906,37 @@ function renderPuntualidad() {
         minutosRetraso: v.minutosRetraso || 0,
         usuario: v.llegadaUsuario || "—",
         instaladores: v.instaladores || [],
+        mes: d.getMonth(),
+        anio: d.getFullYear(),
+        semana: getWeekNumber(d)
+      });
+    });
+    // Fuente 2: bitacoraInstalacion.avances con tag "llegada" (registros históricos sin visita vinculada)
+    const avances = (p.bitacoraInstalacion && p.bitacoraInstalacion.avances) || [];
+    avances.filter(a => a.tag === "llegada").forEach(a => {
+      if (_visitasIds.has(p.id + "_" + a.fecha)) return; // ya contado
+      const d = new Date(a.fecha);
+      // Buscar visita programada más cercana para calcular retraso
+      const visitas = (p.visitasProgramadas || []);
+      let minutosRetraso = 0, fechaHoraProg = a.fecha;
+      if (visitas.length > 0) {
+        const sorted = visitas.slice().sort((va, vb) => Math.abs(new Date(va.fechaHora) - d) - Math.abs(new Date(vb.fechaHora) - d));
+        const cercana = sorted[0];
+        const diffMs = Math.abs(new Date(cercana.fechaHora) - d);
+        if (diffMs <= 8 * 60 * 60 * 1000) {
+          minutosRetraso = Math.round((d - new Date(cercana.fechaHora)) / 60000);
+          fechaHoraProg = cercana.fechaHora;
+        }
+      }
+      checkins.push({
+        idProy: p.id,
+        nombreProy: p.nombre || p.id,
+        idVisita: null,
+        fechaHora: fechaHoraProg,
+        horaLlegada: a.fecha,
+        minutosRetraso,
+        usuario: a.usuario || "—",
+        instaladores: [],
         mes: d.getMonth(),
         anio: d.getFullYear(),
         semana: getWeekNumber(d)
@@ -5504,7 +5559,7 @@ function openAvanceModal(idProy) {
     fotos: []
   }};
   document.getElementById("modal").classList.remove("wide");
-  document.getElementById("modalTitle").textContent = "Registrar avance";
+  document.getElementById("modalTitle").textContent = window._salidaDespuesDeAvance ? "¿Qué se hizo hoy? (requerido al salir)" : "Registrar avance";
   const usuario = getCurrentUser();
   document.getElementById("modalBody").innerHTML = `
     <div style="padding: 4px 0 12px;">
@@ -5572,10 +5627,10 @@ function openAvanceModal(idProy) {
       </div>
     </div>
   `;
-  document.getElementById("modalFooter").innerHTML = `
-    <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
-    <button class="btn btn-success" style="flex:1; padding: 11px;" onclick="submitModal()">💾 Guardar avance</button>
-  `;
+  document.getElementById("modalFooter").innerHTML = window._salidaDespuesDeAvance
+    ? `<button class="btn btn-success" style="flex:1; padding: 11px;" onclick="submitModal()">💾 Guardar avance y registrar salida</button>`
+    : `<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
+       <button class="btn btn-success" style="flex:1; padding: 11px;" onclick="submitModal()">💾 Guardar avance</button>`;
   document.getElementById("modalOverlay").classList.add("open");
 }
 
@@ -5761,6 +5816,9 @@ async function submitAvance() {
     if (todasListas) {
       // Generar una orden de servicio por cada unidad roja
       if (!Array.isArray(state.servicios)) state.servicios = [];
+      const _manana = new Date(); _manana.setDate(_manana.getDate() + 1);
+      const _fechaManana = _manana.toISOString().slice(0, 10);
+      const _instaladorProy = (p.instaladoresAsignados && p.instaladoresAsignados[0]) || "";
       ordenes.forEach(o => {
         (flaggedByOrden[o.id] || []).forEach(num => {
           state.servicios.push({
@@ -5779,9 +5837,9 @@ async function submitAvance() {
             numeroOrden: o.numero,
             idOrdenAsociada: o.id,
             numUnidad: num,
-            fechaProgramada: "",
-            horaProgramada: "",
-            instaladorAsignado: "",
+            fechaProgramada: _fechaManana,
+            horaProgramada: "09:00",
+            instaladorAsignado: _instaladorProy,
             _esInstalacionPendiente: true
           });
           serviciosGenerados++;
@@ -5811,10 +5869,22 @@ async function submitAvance() {
     toast("✅ Todas las unidades listas — instalación quitada de la agenda.", "success");
     return;
   }
+  // Si la salida estaba pendiente, registrarla ahora
+  const _idSalida = window._salidaDespuesDeAvance || null;
+  window._salidaDespuesDeAvance = null;
+
   saveState();
   closeModal();
   render();
-  if (serviciosGenerados > 0) {
+
+  if (_idSalida) {
+    registrarAsistencia(_idSalida, "salida", null);
+    if (serviciosGenerados > 0) {
+      toast(`🔧 ${serviciosGenerados} servicio(s) generado(s). Salida registrada.`, "success");
+    } else {
+      toast("Avance y salida registrados.", "success");
+    }
+  } else if (serviciosGenerados > 0) {
     toast(`🔧 ${serviciosGenerados} servicio(s) generado(s) — instalación quitada de agenda.`, "success");
   } else {
     toast("Avance registrado.", "success");
@@ -6414,8 +6484,11 @@ function doLogout() {
   if (state.config) {
     state.config.session = null;
   }
+  // Marcar timestamp actual para que Supabase no pise el logout al recargar
+  state._lastSaved = Date.now();
   // Forzar guardado inmediato: cancelar debounce pendiente y guardar directo
   if (typeof _v3SaveTimeout !== "undefined") clearTimeout(_v3SaveTimeout);
+  if (_syncTimer) clearTimeout(_syncTimer);
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch(e) {}
   setTimeout(() => location.reload(true), 150);
 }
@@ -14048,6 +14121,8 @@ function closeModal() {
   const overlay = document.getElementById("modalOverlay");
   if (overlay) overlay.classList.remove("open");
   modalContext = null;
+  // Si se cierra el modal sin guardar, limpiar el flag de salida pendiente
+  window._salidaDespuesDeAvance = null;
 }
 
 let _submitModalBusy = false;
