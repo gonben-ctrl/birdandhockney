@@ -1678,6 +1678,7 @@ body[data-rol="instalador"] .nav [data-view="retro"] {
       
       <div class="nav-section nav-full">Datos</div>
       <div class="nav-item nav-full" data-view="arquitectos"><span class="nav-icon">◔</span><span>Arquitectos</span></div>
+      <div class="nav-item nav-admin-only" data-view="fotos-retro"><span class="nav-icon">📸</span><span>Fotos Retro</span></div>
       <div class="nav-item nav-full" data-view="cotizaciones"><span class="nav-icon">📄</span><span>Cotizaciones</span></div>
       <div class="nav-item nav-full" data-view="pagos"><span class="nav-icon">✓</span><span>Pagos</span></div>
       <div class="nav-item nav-full" data-view="muestrarios"><span class="nav-icon">▣</span><span>Muestrarios</span></div>
@@ -3130,8 +3131,8 @@ function render() {
   if (rol === "instalador" && accesoTotal && !["instalacion", "instalacion-detail", "dashboard", "calendario", "proyecto-detail", "arquitecto-detail", "retro"].includes(currentView)) {
     currentView = "instalacion";
   }
-  // Si NO es admin y trata de ir a Configuracion, redirigir a dashboard
-  if (rol !== "admin" && currentView === "config") {
+  // Si NO es admin y trata de ir a vistas admin-only, redirigir a dashboard
+  if (rol !== "admin" && (currentView === "config" || currentView === "fotos-retro")) {
     currentView = "dashboard";
     setTimeout(() => toast("Solo el administrador puede entrar a Configuración.", "warn"), 100);
   }
@@ -3193,6 +3194,7 @@ function render() {
     case "analisis": c.innerHTML = renderAnalisis(); afterAnalisis(); break;
     case "config": c.innerHTML = renderConfig(); break;
     case "retro": c.innerHTML = renderRetro(); break;
+    case "fotos-retro": c.innerHTML = renderFotosRetro(); break;
   }
 }
 function destroyCharts() {
@@ -5007,8 +5009,24 @@ function renderPuntualidad() {
     });
   });
 
+  // Deduplicar: solo la PRIMERA llegada del día por (instalador + proyecto)
+  // Si regresan después de comer, esa segunda llegada no cuenta
+  const _seen = new Map();
+  const checkinsFiltrados = [];
+  checkins
+    .slice()
+    .sort((a, b) => (a.horaLlegada || "").localeCompare(b.horaLlegada || "")) // orden cronológico
+    .forEach(c => {
+      const dia = (c.horaLlegada || "").slice(0, 10); // YYYY-MM-DD
+      const key = `${c.usuario}|${c.idProy}|${dia}`;
+      if (!_seen.has(key)) {
+        _seen.set(key, true);
+        checkinsFiltrados.push(c);
+      }
+    });
+
   // Filtrar por periodo
-  let filtrados = checkins;
+  let filtrados = checkinsFiltrados;
   if (f.periodo === "mes") {
     filtrados = checkins.filter(c => c.mes === f.mes && c.anio === f.anio);
   } else if (f.periodo === "semana") {
@@ -14060,38 +14078,15 @@ function submitMuestrario() {
 // ═══════════════════════════════════════════════════════
 //  RETRO — Retroalimentación de productos
 // ═══════════════════════════════════════════════════════
+// ── Retro: pantalla de subida (simple, para todos) ──────────────────────
 function renderRetro() {
-  const items = (state.retro || []).slice().sort((a,b) => (b.fecha||"").localeCompare(a.fecha||""));
-  const usuario = getCurrentUser();
-
-  const cardHtml = items.length === 0
-    ? `<div style="text-align:center;padding:40px 20px;color:var(--gray);">
-        <div style="font-size:48px;margin-bottom:12px;">📸</div>
-        <div style="font-size:15px;font-weight:600;">Sin retro aún</div>
-        <div style="font-size:13px;margin-top:6px;">Sé el primero en subir una foto de producto</div>
-       </div>`
-    : `<div class="retro-grid">${items.map(r => {
-        const esBueno = r.tipo === "bueno";
-        return `<div class="retro-card">
-          ${r.foto ? `<img class="retro-card-img" src="${r.foto}" onclick="openRetroLightbox('${r.id}')" alt="retro">` : `<div style="width:100%;aspect-ratio:4/3;background:var(--gray-light);display:flex;align-items:center;justify-content:center;font-size:32px;color:var(--gray);">📦</div>`}
-          <div class="retro-card-body">
-            <span class="retro-card-badge ${r.tipo || 'bueno'}">${esBueno ? "👍 Bueno" : "👎 Malo"}</span>
-            ${r.nota ? `<div class="retro-card-nota">${escape(r.nota)}</div>` : ""}
-            <div class="retro-card-meta">${escape(r.usuario || "—")} · ${fmtDateTime(r.fecha)}</div>
-            ${getCurrentUser() === r.usuario || getActiveUser()?.rol === "admin" ? `<button onclick="deleteRetro('${r.id}')" style="margin-top:6px;border:none;background:none;color:var(--gray);font-size:11px;cursor:pointer;padding:0;">✕ Eliminar</button>` : ""}
-          </div>
-        </div>`;
-      }).join("")}</div>`;
-
   return `
     <div class="content-header">
       <div class="content-title">💬 Retro — Retroalimentación de productos</div>
     </div>
-    <div style="max-width:600px;margin:0 auto 20px;">
-      <!-- Formulario de nueva retro -->
-      <div class="card" style="margin-bottom:16px;">
-        <div class="card-header"><div class="card-title">Nueva retroalimentación</div></div>
-        <div class="card-body" style="padding:16px;">
+    <div style="max-width:500px;margin:0 auto 20px;">
+      <div class="card">
+        <div class="card-body" style="padding:20px;">
 
           <!-- Tipo: bueno / malo -->
           <div class="retro-tipo-bar" id="retro-tipo-bar">
@@ -14110,24 +14105,72 @@ function renderRetro() {
           <button id="retro-quitar-foto" onclick="retroQuitarFoto()" style="display:none;margin-top:6px;border:none;background:none;color:var(--red);font-size:12px;cursor:pointer;font-family:inherit;">✕ Quitar foto</button>
 
           <!-- Nota -->
-          <textarea id="retro-nota" rows="3" placeholder="¿Qué observaste? (opcional — ej: la tela se despega en esquinas, el motor hace ruido al bajar…)"
-            style="margin-top:12px;width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;font-family:inherit;resize:vertical;line-height:1.45;"></textarea>
+          <textarea id="retro-nota" rows="3" placeholder="¿Qué observaste? (opcional)"
+            style="margin-top:14px;width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;font-family:inherit;resize:vertical;line-height:1.45;"></textarea>
 
           <!-- Guardar -->
-          <button onclick="guardarRetro()" style="margin-top:12px;width:100%;padding:13px;background:var(--navy);color:white;border:none;border-radius:10px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;transition:background .15s;">
-            💾 Guardar retroalimentación
+          <button onclick="guardarRetro()" id="retro-guardar-btn"
+            style="margin-top:14px;width:100%;padding:15px;background:var(--navy);color:white;border:none;border-radius:10px;font-size:16px;font-weight:700;cursor:pointer;font-family:inherit;">
+            💾 Enviar retroalimentación
           </button>
         </div>
       </div>
 
-      <!-- Galería -->
-      <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--gray);margin-bottom:10px;">
-        ${items.length} entradas registradas
+      <!-- Confirmación enviado -->
+      <div id="retro-enviado" style="display:none;text-align:center;padding:30px 20px;color:var(--green);">
+        <div style="font-size:48px;">✅</div>
+        <div style="font-size:17px;font-weight:700;margin-top:10px;">¡Enviado!</div>
+        <div style="font-size:13px;color:var(--gray);margin-top:6px;">Tu retroalimentación fue guardada.</div>
+        <button onclick="retroNueva()" style="margin-top:16px;padding:10px 24px;background:var(--navy);color:white;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;">+ Agregar otra</button>
       </div>
-      ${cardHtml}
     </div>
+  `;
+}
 
-    <!-- Lightbox retro -->
+// ── Fotos Retro: galería admin-only ─────────────────────────────────────
+function renderFotosRetro() {
+  const items = (state.retro || []).slice().sort((a,b) => (b.fecha||"").localeCompare(a.fecha||""));
+  const buenos = items.filter(r => r.tipo === "bueno").length;
+  const malos  = items.filter(r => r.tipo !== "bueno").length;
+
+  const cardHtml = items.length === 0
+    ? `<div style="text-align:center;padding:40px;color:var(--gray);">
+        <div style="font-size:48px;">📭</div>
+        <div style="font-weight:600;margin-top:12px;">Sin entradas todavía</div>
+       </div>`
+    : `<div class="retro-grid">${items.map(r => {
+        const esBueno = r.tipo === "bueno";
+        return `<div class="retro-card">
+          ${r.foto
+            ? `<img class="retro-card-img" src="${r.foto}" onclick="openRetroLightbox('${r.id}')" alt="retro">`
+            : `<div style="width:100%;aspect-ratio:4/3;background:var(--gray-light);display:flex;align-items:center;justify-content:center;font-size:32px;">📦</div>`}
+          <div class="retro-card-body">
+            <span class="retro-card-badge ${r.tipo||'bueno'}">${esBueno ? "👍 Bueno" : "👎 Malo"}</span>
+            ${r.nota ? `<div class="retro-card-nota">${escape(r.nota)}</div>` : ""}
+            <div class="retro-card-meta">${escape(r.usuario||"—")} · ${fmtDateTime(r.fecha)}</div>
+            <button onclick="deleteRetro('${r.id}')" style="margin-top:6px;border:none;background:none;color:var(--gray);font-size:11px;cursor:pointer;padding:0;">✕ Eliminar</button>
+          </div>
+        </div>`;
+      }).join("")}</div>`;
+
+  return `
+    <div class="content-header">
+      <div class="content-title">📸 Fotos Retro</div>
+    </div>
+    <div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap;">
+      <div style="background:white;border-radius:8px;padding:10px 18px;box-shadow:var(--shadow);font-size:13px;">
+        <span style="font-size:20px;">📋</span> <strong>${items.length}</strong> entradas totales
+      </div>
+      <div style="background:#E8F5E9;border-radius:8px;padding:10px 18px;font-size:13px;">
+        👍 <strong>${buenos}</strong> buenos
+      </div>
+      <div style="background:#FFEBEE;border-radius:8px;padding:10px 18px;font-size:13px;">
+        👎 <strong>${malos}</strong> malos
+      </div>
+    </div>
+    ${cardHtml}
+
+    <!-- Lightbox -->
     <div id="retro-lightbox" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.92);z-index:9999;align-items:center;justify-content:center;flex-direction:column;padding:16px;" onclick="closeRetroLightbox()">
       <img id="retro-lightbox-img" src="" style="max-width:100%;max-height:85vh;border-radius:8px;object-fit:contain;" alt="">
       <div id="retro-lightbox-meta" style="color:white;font-size:13px;margin-top:12px;text-align:center;opacity:.8;"></div>
@@ -14140,36 +14183,50 @@ let _retroFotoB64 = null;
 
 function setRetroTipo(tipo) {
   _retroTipo = tipo;
-  document.getElementById("retro-btn-bueno").className = "retro-tipo-btn bueno" + (tipo==="bueno"?" sel":"");
-  document.getElementById("retro-btn-malo").className  = "retro-tipo-btn malo"  + (tipo==="malo" ?" sel":"");
+  const bb = document.getElementById("retro-btn-bueno");
+  const bm = document.getElementById("retro-btn-malo");
+  if (bb) bb.className = "retro-tipo-btn bueno" + (tipo==="bueno"?" sel":"");
+  if (bm) bm.className = "retro-tipo-btn malo"  + (tipo==="malo" ?" sel":"");
 }
 
 function retroFotoSeleccionada(input) {
   const file = input.files[0];
   if (!file) return;
-  const reader = new FileReader();
-  reader.onload = e => {
-    _retroFotoB64 = e.target.result;
+  // Comprimir antes de guardar para evitar que localStorage se llene
+  compressImage(file, 1200, 0.75).then(b64 => {
+    _retroFotoB64 = b64;
     const prev = document.getElementById("retro-preview-img");
     const zone = document.getElementById("retro-upload-zone");
     const quitarBtn = document.getElementById("retro-quitar-foto");
-    if (prev) { prev.src = _retroFotoB64; prev.style.display = "block"; }
+    if (prev) { prev.src = b64; prev.style.display = "block"; }
     if (zone) zone.style.display = "none";
     if (quitarBtn) quitarBtn.style.display = "inline-block";
-  };
-  reader.readAsDataURL(file);
+  }).catch(() => {
+    // fallback sin compresión
+    const reader = new FileReader();
+    reader.onload = e => {
+      _retroFotoB64 = e.target.result;
+      const prev = document.getElementById("retro-preview-img");
+      const zone = document.getElementById("retro-upload-zone");
+      const qb   = document.getElementById("retro-quitar-foto");
+      if (prev) { prev.src = _retroFotoB64; prev.style.display = "block"; }
+      if (zone) zone.style.display = "none";
+      if (qb)   qb.style.display = "inline-block";
+    };
+    reader.readAsDataURL(file);
+  });
 }
 
 function retroQuitarFoto() {
   _retroFotoB64 = null;
   const prev = document.getElementById("retro-preview-img");
   const zone = document.getElementById("retro-upload-zone");
-  const quitarBtn = document.getElementById("retro-quitar-foto");
-  const inp = document.getElementById("retro-foto-input");
+  const qb   = document.getElementById("retro-quitar-foto");
+  const inp  = document.getElementById("retro-foto-input");
   if (prev) { prev.src = ""; prev.style.display = "none"; }
   if (zone) zone.style.display = "flex";
-  if (quitarBtn) quitarBtn.style.display = "none";
-  if (inp) inp.value = "";
+  if (qb)   qb.style.display = "none";
+  if (inp)  inp.value = "";
 }
 
 function guardarRetro() {
@@ -14178,20 +14235,34 @@ function guardarRetro() {
     toast("Agrega al menos una foto o una nota.", "warning"); return;
   }
   if (!state.retro) state.retro = [];
-  const newId = "RT" + Date.now();
   state.retro.push({
-    id: newId,
+    id: "RT" + Date.now(),
     fecha: new Date().toISOString(),
     usuario: getCurrentUser(),
     tipo: _retroTipo,
     foto: _retroFotoB64 || null,
-    nota: nota
+    nota
   });
   _retroFotoB64 = null;
   _retroTipo = "bueno";
-  saveState();
-  toast("✓ Retroalimentación guardada", "success");
-  render();
+  try {
+    saveState();
+  } catch(e) {
+    toast("⚠ Foto muy grande para guardar localmente. Intenta con una foto más pequeña.", "error");
+    state.retro.pop();
+    return;
+  }
+  // Mostrar confirmación en lugar de re-renderizar
+  const form  = document.querySelector(".card");
+  const conf  = document.getElementById("retro-enviado");
+  if (form) form.style.display = "none";
+  if (conf) conf.style.display = "block";
+}
+
+function retroNueva() {
+  _retroFotoB64 = null;
+  _retroTipo = "bueno";
+  render(); // vuelve a mostrar el form limpio
 }
 
 function deleteRetro(id) {
@@ -14204,12 +14275,12 @@ function deleteRetro(id) {
 function openRetroLightbox(id) {
   const r = (state.retro || []).find(x => x.id === id);
   if (!r || !r.foto) return;
-  const lb = document.getElementById("retro-lightbox");
-  const img = document.getElementById("retro-lightbox-img");
+  const lb   = document.getElementById("retro-lightbox");
+  const img  = document.getElementById("retro-lightbox-img");
   const meta = document.getElementById("retro-lightbox-meta");
   if (!lb || !img) return;
   img.src = r.foto;
-  if (meta) meta.textContent = `${r.usuario || ""} · ${fmtDateTime(r.fecha)}${r.nota ? " — " + r.nota : ""}`;
+  if (meta) meta.textContent = `${r.usuario||""} · ${fmtDateTime(r.fecha)}${r.nota ? " — " + r.nota : ""}`;
   lb.style.display = "flex";
 }
 
