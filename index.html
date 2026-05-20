@@ -4923,7 +4923,7 @@ function renderMiAgenda() {
         const fn = v._esServicio ? `registrarLlegadaServicio('${v.id}')` : `registrarLlegada('${v.idProy}')`;
         llegaBtnHtml = `<button onclick="event.stopPropagation(); ${fn}" title="Registrar llegada" style="background:#E8F5E9;border:1.5px solid #4CAF50;color:#2E7D32;width:30px;height:30px;border-radius:50%;cursor:pointer;font-size:13px;font-weight:700;font-family:inherit;display:flex;align-items:center;justify-content:center;">✔</button>`;
       } else {
-        const fn = v._esServicio ? `confirmarCierreServicio('${v.id}')` : `registrarSalidaAgenda('${v.idProy}', '${v.id}')`;
+        const fn = v._esServicio ? `confirmarCierreServicio('${v.id}')` : `registrarSalida('${v.idProy}')`;
         llegaBtnHtml = `<button onclick="event.stopPropagation(); ${fn}" title="${v._esServicio ? 'Registrar salida' : 'Registrar salida'}" style="background:#FFEBEE;border:1.5px solid #E53935;color:#B71C1C;width:30px;height:30px;border-radius:50%;cursor:pointer;font-size:13px;font-weight:700;font-family:inherit;display:flex;align-items:center;justify-content:center;">🔴</button>`;
       }
     }
