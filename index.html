@@ -3112,17 +3112,19 @@ function render() {
     if (!accesoTotal) {
       navEl.querySelectorAll("[data-view]").forEach(item => {
         const view = item.getAttribute("data-view");
-        item.style.display = accesos.includes(view) ? "" : "none";
+        // "retro" siempre visible para todos
+        item.style.display = (accesos.includes(view) || VISTAS_PUBLICAS.includes(view)) ? "" : "none";
       });
     } else {
       navEl.querySelectorAll("[data-view]").forEach(item => { item.style.removeProperty("display"); });
     }
   }
   // Redirigir si el usuario no tiene acceso a la vista actual
+  // "retro" es accesible para todos los usuarios sin excepción
+  const VISTAS_PUBLICAS = ["instalacion-detail","proyecto-detail","arquitecto-detail","servicio-detail","puntualidad","calendario","retro"];
   if (active && !accesoTotal) {
     const viewsAllowed = accesos;
-    const inAllowed = viewsAllowed.includes(currentView) ||
-      ["instalacion-detail","proyecto-detail","arquitecto-detail","servicio-detail","puntualidad","calendario"].includes(currentView);
+    const inAllowed = viewsAllowed.includes(currentView) || VISTAS_PUBLICAS.includes(currentView);
     if (!inAllowed) currentView = viewsAllowed[0] || "dashboard";
   }
   // Si es instalador y trata de ir a una vista no permitida, redirigir a instalacion
