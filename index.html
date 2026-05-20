@@ -2390,12 +2390,28 @@ function migrateToV4(data) {
   data.version = 4;
   return data;
 }
+// Devuelve copia del state sin base64 en fotos (las fotos van a Supabase Storage, no a localStorage)
+function _stateParaGuardar() {
+  const s = JSON.parse(JSON.stringify(state));
+  (s.proyectos || []).forEach(p => {
+    ((p.bitacoraInstalacion && p.bitacoraInstalacion.fotos) || []).forEach(f => {
+      if (f.archivo && f.archivo.startsWith("data:")) f.archivo = null;
+    });
+  });
+  (s.servicios || []).forEach(sv => {
+    (sv.fotos || []).forEach(f => {
+      if (f.archivo && f.archivo.startsWith("data:")) f.archivo = null;
+    });
+  });
+  return s;
+}
+
 function saveState() {
   // UX-07: Indicador visual de guardando
   const el = document.getElementById("storageStatus");
   if (el) { el.textContent = "Guardando…"; el.style.color = "var(--gold)"; }
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(_stateParaGuardar()));
     if (el) {
       el.textContent = "✓ Guardado";
       el.style.color = "var(--green)";
@@ -2405,7 +2421,8 @@ function saveState() {
     scheduleSyncToSupabase();
   } catch (e) {
     if (el) { el.textContent = "⚠ Sin espacio"; el.style.color = "var(--red)"; }
-    toast("Error: el navegador se quedó sin espacio. Considera quitar PDFs grandes.", "danger");
+    toast("Error al guardar. Intenta de nuevo.", "danger");
+    console.error("saveState error:", e);
   }
 }
 /* =================== SUPABASE SYNC =================== */
@@ -5843,7 +5860,7 @@ async function submitAvance() {
       try {
         const up = await _uploadFotoCloud(dataUrl, idFoto, "instalacion");
         archivo = up.url; _cloudPath = up.path;
-      } catch(upErr) { console.warn("No se pudo subir foto a la nube:", upErr); }
+      } catch(upErr) { console.error("Upload falló:", upErr); toast("⚠ Error subiendo foto a la nube: " + (upErr.message||upErr), "warning"); }
       p.bitacoraInstalacion.fotos.unshift({
         id: idFoto,
         fecha: today(),
@@ -6190,13 +6207,16 @@ async function quickPhotoUpload(idProy, fileInput) {
       try {
         const dataUrl = await compressImage(file, 1600, 0.82);
         const idFoto = "FT" + Date.now().toString(36) + (++window._fotoCounter);
-        let archivo = dataUrl; // fallback local si falla la nube
+        let archivo = dataUrl; // fallback local temporal si falla la nube
         let _cloudPath = null;
         try {
           const up = await _uploadFotoCloud(dataUrl, idFoto, "instalacion");
           archivo = up.url;
           _cloudPath = up.path;
-        } catch(upErr) { console.warn("No se pudo subir foto a la nube:", upErr); }
+        } catch(upErr) {
+          console.error("Upload falló:", upErr);
+          toast("⚠ Foto guardada solo en este dispositivo (error de nube: " + (upErr.message||upErr) + ")", "warning");
+        }
         p.bitacoraInstalacion.fotos.unshift({
           id: idFoto,
           fecha: today(),
@@ -6295,7 +6315,7 @@ async function submitFotos() {
     try {
       const up = await _uploadFotoCloud(dataUrl, idFoto, "instalacion");
       archivo = up.url; _cloudPath = up.path;
-    } catch(upErr) { console.warn("No se pudo subir foto a la nube:", upErr); }
+    } catch(upErr) { console.error("Upload falló:", upErr); toast("⚠ Error subiendo foto a la nube: " + (upErr.message||upErr), "warning"); }
     p.bitacoraInstalacion.fotos.unshift({
       id: idFoto,
       fecha: today(),
@@ -6454,7 +6474,7 @@ async function submitPendiente() {
     try {
       const up = await _uploadFotoCloud(dataUrl, idFoto, "instalacion");
       archivo = up.url; _cloudPath = up.path;
-    } catch(upErr) { console.warn("No se pudo subir foto a la nube:", upErr); }
+    } catch(upErr) { console.error("Upload falló:", upErr); toast("⚠ Error subiendo foto a la nube: " + (upErr.message||upErr), "warning"); }
     p.bitacoraInstalacion.fotos.unshift({
       id: idFoto,
       fecha: today(),
@@ -13895,7 +13915,7 @@ async function submitServicio() {
     try {
       const up = await _uploadFotoCloud(dataUrl, idFoto, "servicio");
       archivo = up.url; _cloudPath = up.path;
-    } catch(upErr) { console.warn("No se pudo subir foto a la nube:", upErr); }
+    } catch(upErr) { console.error("Upload falló:", upErr); toast("⚠ Error subiendo foto a la nube: " + (upErr.message||upErr), "warning"); }
     updated.fotos.push({
       id: idFoto,
       fecha: today(),
@@ -14196,11 +14216,14 @@ function _b64ToBlob(dataUrl) {
 // prefix: "instalacion" | "servicio" | etc.
 async function _uploadFotoCloud(dataUrl, id, prefix) {
   const sb = _getSb();
-  if (!sb) throw new Error("Supabase no disponible");
+  if (!sb) throw new Error("Supabase SDK no disponible — verifica conexión a internet");
   const blob = _b64ToBlob(dataUrl);
   const path = (prefix || "instalacion") + "/" + id + ".jpg";
-  const { error } = await sb.storage.from(_OBRA_BUCKET).upload(path, blob, { contentType: "image/jpeg", upsert: true });
-  if (error) throw error;
+  const { data: upData, error } = await sb.storage.from(_OBRA_BUCKET).upload(path, blob, { contentType: "image/jpeg", upsert: true });
+  if (error) {
+    console.error("Supabase upload error:", error);
+    throw new Error(error.message || JSON.stringify(error));
+  }
   const { data } = sb.storage.from(_OBRA_BUCKET).getPublicUrl(path);
   return { url: data.publicUrl, path };
 }
