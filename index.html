@@ -5827,6 +5827,7 @@ async function submitAvance() {
   if (allFiles.length > 0) {
     if (!p.bitacoraInstalacion) p.bitacoraInstalacion = { avances: [], fotos: [], pendientes: [] };
     if (!Array.isArray(p.bitacoraInstalacion.fotos)) p.bitacoraInstalacion.fotos = [];
+    if (!window._fotoCounter) window._fotoCounter = 0;
     for (let i = 0; i < allFiles.length; i++) {
       const file = allFiles[i];
       if (!file.type.startsWith("image/")) continue;
@@ -5836,14 +5837,21 @@ async function submitAvance() {
       } catch (e) {
         dataUrl = await readFileAsDataUrl(file);
       }
-      const idFoto = "FT" + Date.now().toString(36) + i;
+      const idFoto = "FT" + Date.now().toString(36) + (++window._fotoCounter);
+      let archivo = dataUrl;
+      let _cloudPath = null;
+      try {
+        const up = await _uploadFotoCloud(dataUrl, idFoto, "instalacion");
+        archivo = up.url; _cloudPath = up.path;
+      } catch(upErr) { console.warn("No se pudo subir foto a la nube:", upErr); }
       p.bitacoraInstalacion.fotos.unshift({
         id: idFoto,
         fecha: today(),
         usuario,
         etapa: tag === "problema" ? "problema" : "durante",
         descripcion: texto.substring(0, 60),
-        archivo: dataUrl
+        archivo,
+        _cloudPath
       });
       fotosIds.push(idFoto);
     }
@@ -6181,13 +6189,22 @@ async function quickPhotoUpload(idProy, fileInput) {
       if (!file.type.startsWith("image/")) continue;
       try {
         const dataUrl = await compressImage(file, 1600, 0.82);
+        const idFoto = "FT" + Date.now().toString(36) + (++window._fotoCounter);
+        let archivo = dataUrl; // fallback local si falla la nube
+        let _cloudPath = null;
+        try {
+          const up = await _uploadFotoCloud(dataUrl, idFoto, "instalacion");
+          archivo = up.url;
+          _cloudPath = up.path;
+        } catch(upErr) { console.warn("No se pudo subir foto a la nube:", upErr); }
         p.bitacoraInstalacion.fotos.unshift({
-          id: "FT" + Date.now().toString(36) + (++window._fotoCounter),
+          id: idFoto,
           fecha: today(),
           usuario,
           etapa: etapaDefault,
           descripcion: "",
-          archivo: dataUrl,
+          archivo,
+          _cloudPath,
           nombreOriginal: file.name
         });
         count++;
@@ -6262,6 +6279,7 @@ async function submitFotos() {
   if (!p.bitacoraInstalacion) p.bitacoraInstalacion = { avances: [], fotos: [], pendientes: [] };
   if (!Array.isArray(p.bitacoraInstalacion.fotos)) p.bitacoraInstalacion.fotos = [];
   let count = 0;
+  if (!window._fotoCounter) window._fotoCounter = 0;
   for (let i = 0; i < files.length; i++) {
     const file = files[i];
     if (!file.type.startsWith("image/")) continue;
@@ -6271,13 +6289,21 @@ async function submitFotos() {
     } catch (e) {
       dataUrl = await readFileAsDataUrl(file);
     }
+    const idFoto = "FT" + Date.now().toString(36) + (++window._fotoCounter);
+    let archivo = dataUrl;
+    let _cloudPath = null;
+    try {
+      const up = await _uploadFotoCloud(dataUrl, idFoto, "instalacion");
+      archivo = up.url; _cloudPath = up.path;
+    } catch(upErr) { console.warn("No se pudo subir foto a la nube:", upErr); }
     p.bitacoraInstalacion.fotos.unshift({
-      id: "FT" + Date.now().toString(36) + i,
+      id: idFoto,
       fecha: today(),
       usuario,
       etapa,
       descripcion: desc,
-      archivo: dataUrl,
+      archivo,
+      _cloudPath,
       nombreOriginal: file.name
     });
     count++;
@@ -6295,6 +6321,8 @@ function deleteFotoBit(idProy, idFoto) {
   if (!confirm("¿Eliminar esta foto?")) return;
   const p = findProy(idProy);
   if (!p || !p.bitacoraInstalacion) return;
+  const foto = (p.bitacoraInstalacion.fotos || []).find(f => f.id === idFoto);
+  if (foto && foto._cloudPath) _deleteFotoCloud(foto._cloudPath); // borrar de la nube
   p.bitacoraInstalacion.fotos = (p.bitacoraInstalacion.fotos || []).filter(f => f.id !== idFoto);
   saveState();
   render();
@@ -6410,6 +6438,7 @@ async function submitPendiente() {
   if (!p.bitacoraInstalacion) p.bitacoraInstalacion = { avances: [], fotos: [], pendientes: [] };
   if (!Array.isArray(p.bitacoraInstalacion.fotos)) p.bitacoraInstalacion.fotos = [];
   const fotosIds = [];
+  if (!window._fotoCounter) window._fotoCounter = 0;
   for (let i = 0; i < allFiles.length; i++) {
     const file = allFiles[i];
     if (!file.type.startsWith("image/")) continue;
@@ -6419,14 +6448,21 @@ async function submitPendiente() {
     } catch (e) {
       dataUrl = await readFileAsDataUrl(file);
     }
-    const idFoto = "FT" + Date.now().toString(36) + i;
+    const idFoto = "FT" + Date.now().toString(36) + (++window._fotoCounter);
+    let archivo = dataUrl;
+    let _cloudPath = null;
+    try {
+      const up = await _uploadFotoCloud(dataUrl, idFoto, "instalacion");
+      archivo = up.url; _cloudPath = up.path;
+    } catch(upErr) { console.warn("No se pudo subir foto a la nube:", upErr); }
     p.bitacoraInstalacion.fotos.unshift({
       id: idFoto,
       fecha: today(),
       usuario: getCurrentUser(),
       etapa: "problema",
       descripcion: "Pendiente: " + texto.substring(0, 50),
-      archivo: dataUrl
+      archivo,
+      _cloudPath
     });
     fotosIds.push(idFoto);
   }
@@ -13843,6 +13879,7 @@ async function submitServicio() {
   const allFiles = [];
   if (camIn && camIn.files) for (let i = 0; i < camIn.files.length; i++) allFiles.push(camIn.files[i]);
   if (galIn && galIn.files) for (let i = 0; i < galIn.files.length; i++) allFiles.push(galIn.files[i]);
+  if (!window._fotoCounter) window._fotoCounter = 0;
   for (let i = 0; i < allFiles.length; i++) {
     const file = allFiles[i];
     if (!file.type.startsWith("image/")) continue;
@@ -13852,11 +13889,19 @@ async function submitServicio() {
     } catch (e) {
       dataUrl = await readFileAsDataUrl(file);
     }
+    const idFoto = "FT" + Date.now().toString(36) + (++window._fotoCounter);
+    let archivo = dataUrl;
+    let _cloudPath = null;
+    try {
+      const up = await _uploadFotoCloud(dataUrl, idFoto, "servicio");
+      archivo = up.url; _cloudPath = up.path;
+    } catch(upErr) { console.warn("No se pudo subir foto a la nube:", upErr); }
     updated.fotos.push({
-      id: "FT" + Date.now().toString(36) + i,
+      id: idFoto,
       fecha: today(),
       usuario: getCurrentUser(),
-      archivo: dataUrl
+      archivo,
+      _cloudPath
     });
   }
   // Si pasó a Cerrado y no tiene fechaCierre, ponerla en hoy
@@ -13922,6 +13967,10 @@ function updateServicioFotosPreview(inputEl) {
 
 function deleteServicioFoto(idServ, idFoto) {
   if (!confirm("¿Eliminar esta foto del servicio?")) return;
+  // Borrar de la nube si tiene path guardado
+  const _fotoRef = (modalContext && modalContext.data && modalContext.data.fotos || []).find(f => f.id === idFoto)
+    || ((state.servicios || []).find(s => s.id === idServ)?.fotos || []).find(f => f.id === idFoto);
+  if (_fotoRef && _fotoRef._cloudPath) _deleteFotoCloud(_fotoRef._cloudPath);
   // Si estamos en modal nuevo, modificar modalContext.data
   if (modalContext && modalContext.data && Array.isArray(modalContext.data.fotos)) {
     modalContext.data.fotos = modalContext.data.fotos.filter(f => f.id !== idFoto);
@@ -14127,7 +14176,69 @@ function renderRetro() {
   `;
 }
 
-// ── Fotos Retro: galería admin-only ─────────────────────────────────────
+// ── Supabase Storage: fotos en la nube ──────────────────────────────────
+// CONFIGURACIÓN: En Supabase → Storage → crear 2 buckets públicos:
+//   "retro-fotos"  (para retroalimentación de instaladores)
+//   "obra-fotos"   (para bitácora instalación y servicios)
+const _RETRO_BUCKET = "retro-fotos";
+const _OBRA_BUCKET  = "obra-fotos";
+
+function _b64ToBlob(dataUrl) {
+  const [header, data] = dataUrl.split(",");
+  const mime = (header.match(/:(.*?);/) || [])[1] || "image/jpeg";
+  const binary = atob(data);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return new Blob([bytes], { type: mime });
+}
+
+// Sube una foto (base64 dataUrl) a Supabase Storage y retorna la URL pública.
+// prefix: "instalacion" | "servicio" | etc.
+async function _uploadFotoCloud(dataUrl, id, prefix) {
+  const sb = _getSb();
+  if (!sb) throw new Error("Supabase no disponible");
+  const blob = _b64ToBlob(dataUrl);
+  const path = (prefix || "instalacion") + "/" + id + ".jpg";
+  const { error } = await sb.storage.from(_OBRA_BUCKET).upload(path, blob, { contentType: "image/jpeg", upsert: true });
+  if (error) throw error;
+  const { data } = sb.storage.from(_OBRA_BUCKET).getPublicUrl(path);
+  return { url: data.publicUrl, path };
+}
+
+// Borra una foto de Supabase Storage por su path guardado.
+async function _deleteFotoCloud(cloudPath) {
+  const sb = _getSb();
+  if (!sb || !cloudPath) return;
+  try { await sb.storage.from(_OBRA_BUCKET).remove([cloudPath]); } catch(e) {}
+}
+
+async function _retroSaveFoto(id, dataUrl) {
+  const sb = _getSb();
+  if (!sb) throw new Error("Supabase no disponible");
+  const blob = _b64ToBlob(dataUrl);
+  const path = id + ".jpg";
+  const { error } = await sb.storage.from(_RETRO_BUCKET).upload(path, blob, { contentType: "image/jpeg", upsert: true });
+  if (error) throw error;
+  const { data } = sb.storage.from(_RETRO_BUCKET).getPublicUrl(path);
+  return data.publicUrl;
+}
+
+async function _retroGetFoto(id) {
+  const sb = _getSb();
+  if (!sb) return null;
+  try {
+    const { data } = sb.storage.from(_RETRO_BUCKET).getPublicUrl(id + ".jpg");
+    return data.publicUrl || null;
+  } catch(e) { return null; }
+}
+
+async function _retroDelFoto(id) {
+  const sb = _getSb();
+  if (!sb) return;
+  try { await sb.storage.from(_RETRO_BUCKET).remove([id + ".jpg"]); } catch(e) {}
+}
+
+// ── Galería admin ────────────────────────────────────────────────────────
 function renderFotosRetro() {
   const items = (state.retro || []).slice().sort((a,b) => (b.fecha||"").localeCompare(a.fecha||""));
   const buenos = items.filter(r => r.tipo === "bueno").length;
@@ -14138,12 +14249,17 @@ function renderFotosRetro() {
         <div style="font-size:48px;">📭</div>
         <div style="font-weight:600;margin-top:12px;">Sin entradas todavía</div>
        </div>`
-    : `<div class="retro-grid">${items.map(r => {
+    : `<div class="retro-grid" id="retro-admin-grid">${items.map(r => {
         const esBueno = r.tipo === "bueno";
+        // fotoUrl = Supabase Storage URL, foto = legacy inline base64, hasFoto+no fotoUrl = old IndexedDB (mostrar placeholder)
+        const imgSrc = r.fotoUrl || r.foto || null;
+        const hasFoto = !!(r.fotoUrl || r.foto || r.hasFoto);
         return `<div class="retro-card">
-          ${r.foto
-            ? `<img class="retro-card-img" src="${r.foto}" onclick="openRetroLightbox('${r.id}')" alt="retro">`
-            : `<div style="width:100%;aspect-ratio:4/3;background:var(--gray-light);display:flex;align-items:center;justify-content:center;font-size:32px;">📦</div>`}
+          ${imgSrc
+            ? `<img class="retro-card-img" src="${imgSrc}" onclick="openRetroLightbox('${r.id}')" alt="retro">`
+            : hasFoto
+              ? `<div style="width:100%;aspect-ratio:4/3;background:var(--gray-light);display:flex;align-items:center;justify-content:center;font-size:32px;" title="Foto guardada en versión anterior">📷</div>`
+              : `<div style="width:100%;aspect-ratio:4/3;background:var(--gray-light);display:flex;align-items:center;justify-content:center;font-size:32px;">—</div>`}
           <div class="retro-card-body">
             <span class="retro-card-badge ${r.tipo||'bueno'}">${esBueno ? "👍 Bueno" : "👎 Malo"}</span>
             ${r.nota ? `<div class="retro-card-nota">${escape(r.nota)}</div>` : ""}
@@ -14154,12 +14270,10 @@ function renderFotosRetro() {
       }).join("")}</div>`;
 
   return `
-    <div class="content-header">
-      <div class="content-title">📸 Fotos Retro</div>
-    </div>
+    <div class="content-header"><div class="content-title">📸 Fotos Retro</div></div>
     <div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap;">
       <div style="background:white;border-radius:8px;padding:10px 18px;box-shadow:var(--shadow);font-size:13px;">
-        <span style="font-size:20px;">📋</span> <strong>${items.length}</strong> entradas totales
+        📋 <strong>${items.length}</strong> entradas
       </div>
       <div style="background:#E8F5E9;border-radius:8px;padding:10px 18px;font-size:13px;">
         👍 <strong>${buenos}</strong> buenos
@@ -14169,8 +14283,6 @@ function renderFotosRetro() {
       </div>
     </div>
     ${cardHtml}
-
-    <!-- Lightbox -->
     <div id="retro-lightbox" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.92);z-index:9999;align-items:center;justify-content:center;flex-direction:column;padding:16px;" onclick="closeRetroLightbox()">
       <img id="retro-lightbox-img" src="" style="max-width:100%;max-height:85vh;border-radius:8px;object-fit:contain;" alt="">
       <div id="retro-lightbox-meta" style="color:white;font-size:13px;margin-top:12px;text-align:center;opacity:.8;"></div>
@@ -14178,6 +14290,15 @@ function renderFotosRetro() {
   `;
 }
 
+// _retroLoadAllFotos: ya no es necesario para entradas nuevas (tienen fotoUrl directo).
+// Se mantiene como función vacía para compatibilidad con código existente.
+async function _retroLoadAllFotos(items) {
+  // Las nuevas entradas ya tienen fotoUrl (URL pública de Supabase Storage).
+  // Las entradas legacy con r.foto tienen base64 inline.
+  // Entradas antiguas de IndexedDB (hasFoto=true, sin fotoUrl ni foto) muestran placeholder.
+}
+
+// ── Estado del formulario ────────────────────────────────────────────────
 let _retroTipo = "bueno";
 let _retroFotoB64 = null;
 
@@ -14192,29 +14313,22 @@ function setRetroTipo(tipo) {
 function retroFotoSeleccionada(input) {
   const file = input.files[0];
   if (!file) return;
-  // Comprimir antes de guardar para evitar que localStorage se llene
-  compressImage(file, 1200, 0.75).then(b64 => {
+  const mostrar = b64 => {
     _retroFotoB64 = b64;
     const prev = document.getElementById("retro-preview-img");
     const zone = document.getElementById("retro-upload-zone");
-    const quitarBtn = document.getElementById("retro-quitar-foto");
+    const qb   = document.getElementById("retro-quitar-foto");
     if (prev) { prev.src = b64; prev.style.display = "block"; }
     if (zone) zone.style.display = "none";
-    if (quitarBtn) quitarBtn.style.display = "inline-block";
-  }).catch(() => {
-    // fallback sin compresión
-    const reader = new FileReader();
-    reader.onload = e => {
-      _retroFotoB64 = e.target.result;
-      const prev = document.getElementById("retro-preview-img");
-      const zone = document.getElementById("retro-upload-zone");
-      const qb   = document.getElementById("retro-quitar-foto");
-      if (prev) { prev.src = _retroFotoB64; prev.style.display = "block"; }
-      if (zone) zone.style.display = "none";
-      if (qb)   qb.style.display = "inline-block";
-    };
-    reader.readAsDataURL(file);
-  });
+    if (qb)   qb.style.display = "inline-block";
+  };
+  compressImage(file, 1400, 0.78)
+    .then(mostrar)
+    .catch(() => {
+      const reader = new FileReader();
+      reader.onload = e => mostrar(e.target.result);
+      reader.readAsDataURL(file);
+    });
 }
 
 function retroQuitarFoto() {
@@ -14229,32 +14343,48 @@ function retroQuitarFoto() {
   if (inp)  inp.value = "";
 }
 
-function guardarRetro() {
+async function guardarRetro() {
   const nota = (document.getElementById("retro-nota")?.value || "").trim();
   if (!_retroFotoB64 && !nota) {
     toast("Agrega al menos una foto o una nota.", "warning"); return;
   }
+  // Deshabilitar botón mientras guarda
+  const btn = document.getElementById("retro-guardar-btn");
+  if (btn) { btn.disabled = true; btn.textContent = "Guardando…"; }
+
   if (!state.retro) state.retro = [];
-  state.retro.push({
-    id: "RT" + Date.now(),
+  const newId = "RT" + Date.now();
+
+  // Subir foto a Supabase Storage (nube)
+  let fotoUrl = null;
+  if (_retroFotoB64) {
+    try {
+      fotoUrl = await _retroSaveFoto(newId, _retroFotoB64);
+    } catch(e) {
+      toast("⚠ No se pudo subir la foto a la nube. Verifica tu conexión e intenta de nuevo.", "error");
+      if (btn) { btn.disabled = false; btn.textContent = "💾 Enviar retroalimentación"; }
+      return;
+    }
+  }
+
+  const entrada = {
+    id: newId,
     fecha: new Date().toISOString(),
     usuario: getCurrentUser(),
     tipo: _retroTipo,
-    foto: _retroFotoB64 || null,
+    hasFoto: !!fotoUrl,
+    fotoUrl: fotoUrl || null, // URL pública de Supabase Storage
     nota
-  });
+  };
+
+  state.retro.push(entrada);
   _retroFotoB64 = null;
   _retroTipo = "bueno";
-  try {
-    saveState();
-  } catch(e) {
-    toast("⚠ Foto muy grande para guardar localmente. Intenta con una foto más pequeña.", "error");
-    state.retro.pop();
-    return;
-  }
-  // Mostrar confirmación en lugar de re-renderizar
-  const form  = document.querySelector(".card");
-  const conf  = document.getElementById("retro-enviado");
+  saveState(); // solo guarda metadatos (sin foto), nunca falla por espacio
+
+  // Mostrar confirmación
+  const form = document.querySelector("#content .card");
+  const conf = document.getElementById("retro-enviado");
   if (form) form.style.display = "none";
   if (conf) conf.style.display = "block";
 }
@@ -14262,24 +14392,28 @@ function guardarRetro() {
 function retroNueva() {
   _retroFotoB64 = null;
   _retroTipo = "bueno";
-  render(); // vuelve a mostrar el form limpio
+  render();
 }
 
 function deleteRetro(id) {
   if (!confirm("¿Eliminar esta entrada de retro?")) return;
   state.retro = (state.retro || []).filter(r => r.id !== id);
+  _retroDelFoto(id); // borrar de IndexedDB también
   saveState();
   render();
 }
 
-function openRetroLightbox(id) {
+async function openRetroLightbox(id) {
   const r = (state.retro || []).find(x => x.id === id);
-  if (!r || !r.foto) return;
+  if (!r) return;
   const lb   = document.getElementById("retro-lightbox");
   const img  = document.getElementById("retro-lightbox-img");
   const meta = document.getElementById("retro-lightbox-meta");
   if (!lb || !img) return;
-  img.src = r.foto;
+  // Prioridad: URL de Supabase Storage → base64 inline (legacy)
+  const src = r.fotoUrl || r.foto || null;
+  if (!src) return;
+  img.src = src;
   if (meta) meta.textContent = `${r.usuario||""} · ${fmtDateTime(r.fecha)}${r.nota ? " — " + r.nota : ""}`;
   lb.style.display = "flex";
 }
