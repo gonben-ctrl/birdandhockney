@@ -3991,10 +3991,10 @@ function registrarLlegada(idProy, idVisita) {
 }
 
 // ===== Modal de capturar ubicacion GPS =====
-function openCapturarUbicacionModal(idProy) {
+function openCapturarUbicacionModal(idProy, fromLlegada) {
   const p = findProy(idProy);
   if (!p) return;
-  modalContext = { type: "capturar-ubicacion", id: idProy, data: { tempCoords: p.ubicacionGPS || null } };
+  modalContext = { type: "capturar-ubicacion", id: idProy, data: { tempCoords: p.ubicacionGPS || null, fromLlegada: !!fromLlegada } };
   document.getElementById("modal").classList.remove("wide");
   document.getElementById("modalTitle").textContent = "Ubicación del proyecto — " + p.id;
   const u = p.ubicacionGPS;
@@ -4095,12 +4095,22 @@ function guardarUbicacionGPS() {
   const idProy = modalContext.id;
   const p = findProy(idProy);
   if (!p) return;
-  p.ubicacionGPS = modalContext.data.tempCoords;
+  const coords = modalContext.data.tempCoords;
+  const fromLlegada = modalContext.data.fromLlegada;
+  p.ubicacionGPS = coords;
   p.ultimaActualizacion = nowIso();
-  logEvent(idProy, "ubicacion", `Ubicación GPS capturada (${modalContext.data.tempCoords.fuente}): ${modalContext.data.tempCoords.lat.toFixed(6)}, ${modalContext.data.tempCoords.lng.toFixed(6)}`);
+  logEvent(idProy, "ubicacion", `Ubicación GPS capturada (${coords.fuente}): ${coords.lat.toFixed(6)}, ${coords.lng.toFixed(6)}`);
   saveState();
   closeModal();
-  toast("📍 Ubicación guardada", "success");
+  // Si vino de "Registrar llegada", registrar automáticamente sin pedir GPS de nuevo
+  if (fromLlegada && coords.lat && coords.lng) {
+    toast("📍 Ubicación guardada — registrando llegada…", "success");
+    const radio = (state.config && state.config.radioToleranciaMetros) || 200;
+    const gpsData = { lat: coords.lat, lng: coords.lng, accuracy: coords.accuracy || 0, distanciaDelProyecto: 0 };
+    setTimeout(() => registrarAsistencia(idProy, "llegada", gpsData), 300);
+  } else {
+    toast("📍 Ubicación guardada", "success");
+  }
   render();
 }
 
@@ -4350,8 +4360,8 @@ async function registrarLlegada(idProy) {
   const gpsProyecto = p.ubicacionGPS;
   const gpsValido = gpsProyecto && typeof gpsProyecto.lat === "number" && typeof gpsProyecto.lng === "number";
   if (!gpsValido) {
-    toast("📍 Este proyecto no tiene GPS registrado. Primero captura la ubicación de la obra.", "error");
-    openCapturarUbicacionModal(idProy);
+    toast("📍 Este proyecto no tiene GPS registrado. Captura la ubicación ahora.", "info");
+    openCapturarUbicacionModal(idProy, true); // true = viene de registrarLlegada, continuar auto
     return;
   }
   // Validar que el dispositivo tenga GPS activo antes de proceder
@@ -5036,22 +5046,22 @@ function renderPuntualidad() {
     .sort((a, b) => (a.horaLlegada || "").localeCompare(b.horaLlegada || "")) // orden cronológico
     .forEach(c => {
       const dia = (c.horaLlegada || "").slice(0, 10); // YYYY-MM-DD
-      const key = `${c.usuario}|${c.idProy}|${dia}`;
+      const key = `${c.usuario}|${c.idProy}|${dia}`; // primera llegada por instalador + proyecto + día
       if (!_seen.has(key)) {
         _seen.set(key, true);
         checkinsFiltrados.push(c);
       }
     });
 
-  // Filtrar por periodo
+  // Filtrar por periodo — siempre sobre checkinsFiltrados (ya deduplicados)
   let filtrados = checkinsFiltrados;
   if (f.periodo === "mes") {
-    filtrados = checkins.filter(c => c.mes === f.mes && c.anio === f.anio);
+    filtrados = checkinsFiltrados.filter(c => c.mes === f.mes && c.anio === f.anio);
   } else if (f.periodo === "semana") {
     const hoy = new Date();
     const lunes = new Date(hoy); lunes.setDate(hoy.getDate() - ((hoy.getDay() + 6) % 7)); lunes.setHours(0,0,0,0);
     const domingo = new Date(lunes); domingo.setDate(lunes.getDate() + 6); domingo.setHours(23,59,59,999);
-    filtrados = checkins.filter(c => { const d = new Date(c.horaLlegada); return d >= lunes && d <= domingo; });
+    filtrados = checkinsFiltrados.filter(c => { const d = new Date(c.horaLlegada); return d >= lunes && d <= domingo; });
   }
   if (f.instalador) filtrados = filtrados.filter(c => c.usuario === f.instalador || (c.instaladores || []).includes(f.instalador));
 
