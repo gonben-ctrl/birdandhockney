@@ -1918,6 +1918,8 @@ try { localStorage.removeItem("bnh_sistema_v3"); } catch(_) {}
 try { localStorage.removeItem("bnh_sistema_v2"); } catch(_) {}
 try { localStorage.removeItem("bnh_sistema");    } catch(_) {}
 const STORAGE_KEY = "bnh_sistema_v4";
+// H-14: Función debug — solo loguea si está activo el modo debug (localStorage 'bnh_dbg'='1')
+function debug(...args) { if (localStorage.getItem('bnh_dbg') === '1') console.log('[BnH]', ...args); }
 let state = loadState();
 let currentView = "dashboard";
 let currentChartInstances = {};
@@ -2423,6 +2425,8 @@ function _stripBase64Recursivo(obj) {
 function _stateParaGuardar() {
   const s = JSON.parse(JSON.stringify(state));
   _stripBase64Recursivo(s); // limpieza recursiva: elimina data: URLs en cualquier campo
+  // H-01: No sincronizar sesión activa a Supabase — evita auth bypass en dispositivo nuevo
+  if (s.config) delete s.config.session;
   return s;
 }
 
@@ -2522,7 +2526,7 @@ function initSupabaseRealtime() {
     .on('postgres_changes', { event:'UPDATE', schema:'public', table:'sistema_sync' }, (payload) => {
       if (!payload.new || !payload.new.data) return;
       // No reemplazar state si hay una captura GPS activa — evita race condition
-      if (_gpsCapturandoAhora) { console.log("GPS capture in progress, skipping realtime overwrite"); return; }
+      if (_gpsCapturandoAhora) { debug("GPS capture in progress, skipping realtime overwrite"); return; }
       const remoteTs = new Date(payload.new.updated_at).getTime();
       const localTs  = state._lastSaved || 0;
       if (remoteTs > localTs + 500) { // +500ms para ignorar eco propio
@@ -2607,7 +2611,7 @@ function borrarTodo() {
   // Marcar timestamp reciente para que Supabase no restaure los datos al recargar
   state._lastSaved = Date.now();
   if (typeof _syncTimer !== "undefined" && _syncTimer) clearTimeout(_syncTimer);
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch(e) {}
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(_stateParaGuardar())); } catch(e) {} // H-06: usar _stateParaGuardar evita guardar base64
   // También subir el estado limpio a Supabase para que otros dispositivos lo vean
   if (typeof _syncUp === "function") _syncUp().finally(() => location.reload(true));
   else setTimeout(() => location.reload(true), 300);
@@ -2822,9 +2826,11 @@ function getArquitectosSinContacto(diasUmbral) {
 /* =================== WEB NOTIFICATIONS =================== */
 let notifPermission = "default";
 let notifCheckInterval = null;
-// FIX: Protección brute-force en login
-let _loginAttempts = 0;
-let _loginBlockedUntil = 0;
+// H-05: Protección brute-force persistente en sessionStorage (sobrevive F5, no el cierre de tab)
+function _getLoginAttempts()      { return parseInt(sessionStorage.getItem('_bnh_la')  || '0'); }
+function _setLoginAttempts(n)     { sessionStorage.setItem('_bnh_la',  String(n)); }
+function _getLoginBlockedUntil()  { return parseInt(sessionStorage.getItem('_bnh_lbu') || '0'); }
+function _setLoginBlockedUntil(t) { sessionStorage.setItem('_bnh_lbu', String(t)); }
 const NOTIF_KEY_LAST_CHECK = "bnh_notif_last_check";
 
 
@@ -2925,6 +2931,7 @@ function logEventArq(idArq, tipo, descripcion, usuario, taskId) {
   };
   if (taskId) evento.taskId = taskId;
   arq.bitacora.unshift(evento);
+  if (arq.bitacora.length > 500) arq.bitacora.splice(500); // H-07: límite bitácora
 }
 function findTarea(id) { return (state.tareas || []).find(t => t.id === id); }
 
@@ -2942,6 +2949,7 @@ function logEvent(idProy, tipo, descripcion, usuario, taskId) {
   };
   if (taskId) evento.taskId = taskId;
   proy.bitacora.unshift(evento);
+  if (proy.bitacora.length > 500) proy.bitacora.splice(500); // H-07: límite bitácora
 }
 function nextEventId(arr) {
   // ID único basado en timestamp + random para no chocar
@@ -6660,12 +6668,15 @@ async function sha256(text) {
   }
   return sha256js(text);
 }
+// H-08: sha256 con salt para contraseñas — protección básica contra rainbow tables
+const _PASS_SALT = 'BnH_S4lt_2026';
+async function sha256salted(text) { return sha256(text + _PASS_SALT); }
 
 async function hashInitialPasswords() {
-  // Reemplazar placeholders con hashes SHA-256 reales (precalculados + runtime)
+  // Reemplazar placeholders con hashes SHA-256+salt reales (H-08: salted)
   if (!state.config) return;
-  const HASH_0284    = "811fb553e1827f167b8176e48cfe1e21bc1e8b4a2483f199d8605878c7770980";
-  const HASH_BNH2026 = "5ddc58f64c39607569b51c8a2f6d0f4cde4a0da7617a859f88be7a26e4ea8eff";
+  const HASH_0284    = "173c9b2947b0d8e13f9cb9d94277d1bf6d501861b5a24135bba98cf29b888fc2"; // sha256("0284" + salt)
+  const HASH_BNH2026 = "1e6f4be0487dcf9eb1606b704faaeab07ce79a0eaa043d4cd9183e02c58e9a03"; // sha256("bnh2026" + salt)
   const users = state.config.users || [];
   let changed = false;
   for (const u of users) {
@@ -6698,9 +6709,9 @@ function getActiveUser() {
 async function attemptLogin() {
   const errEl = document.getElementById("loginError");
   errEl.classList.remove("show");
-  // FIX: Protección brute-force — bloquear tras 5 intentos fallidos por 30 segundos
-  if (Date.now() < _loginBlockedUntil) {
-    const secsLeft = Math.ceil((_loginBlockedUntil - Date.now()) / 1000);
+  // H-05: Protección brute-force persistente (sessionStorage — sobrevive F5)
+  if (Date.now() < _getLoginBlockedUntil()) {
+    const secsLeft = Math.ceil((_getLoginBlockedUntil() - Date.now()) / 1000);
     errEl.textContent = `Demasiados intentos. Espera ${secsLeft} segundo${secsLeft === 1 ? "" : "s"} e intenta de nuevo.`;
     errEl.classList.add("show");
     return;
@@ -6718,28 +6729,40 @@ async function attemptLogin() {
   const userLower = usuario.toLowerCase();
   const user = (state.config.users || []).find(u => (u.nombre || "").toLowerCase() === userLower);
   if (!user) {
-    _loginAttempts++;
+    _setLoginAttempts(_getLoginAttempts() + 1);
     errEl.textContent = "Usuario no encontrado. Verifica el nombre.";
     errEl.classList.add("show");
     return;
   }
-  const hash = await sha256(password);
-  if (hash !== user.passwordHash) {
-    _loginAttempts++;
-    if (_loginAttempts >= 5) {
-      _loginBlockedUntil = Date.now() + 30 * 1000;
-      _loginAttempts = 0;
+  const hash = await sha256salted(password);
+  // H-08: Migración transparente — si el hash no coincide con salt, probar hash legacy (sin salt)
+  let hashOk = (hash === user.passwordHash);
+  if (!hashOk) {
+    const hashLegacy = await sha256(password); // intento sin salt (usuarios anteriores)
+    if (hashLegacy === user.passwordHash) {
+      // Migrar automáticamente al hash con salt sin que el usuario note nada
+      user.passwordHash = hash;
+      saveState();
+      hashOk = true;
+    }
+  }
+  if (!hashOk) {
+    const intentos = _getLoginAttempts() + 1;
+    _setLoginAttempts(intentos);
+    if (intentos >= 5) {
+      _setLoginBlockedUntil(Date.now() + 30 * 1000);
+      _setLoginAttempts(0);
       errEl.textContent = "Demasiados intentos fallidos. Espera 30 segundos antes de intentar de nuevo.";
     } else {
-      errEl.textContent = `Contraseña incorrecta. (Intento ${_loginAttempts}/5)`;
+      errEl.textContent = `Contraseña incorrecta. (Intento ${intentos}/5)`;
     }
     errEl.classList.add("show");
     document.getElementById("loginPassword").value = "";
     return;
   }
   // Login exitoso — resetear contadores
-  _loginAttempts = 0;
-  _loginBlockedUntil = 0;
+  _setLoginAttempts(0);
+  _setLoginBlockedUntil(0);
   const expira = Date.now() + 7 * 24 * 60 * 60 * 1000;
   // FIX: No guardar el rol en la sesión — se deriva de state.config.users en getActiveUser()
   state.config.session = { userId: user.id, expira };
@@ -6764,7 +6787,7 @@ function doLogout() {
   // Forzar guardado inmediato: cancelar debounce pendiente y guardar directo
   if (typeof _v3SaveTimeout !== "undefined") clearTimeout(_v3SaveTimeout);
   if (_syncTimer) clearTimeout(_syncTimer);
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch(e) {}
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(_stateParaGuardar())); } catch(e) {} // H-06: usar _stateParaGuardar evita guardar base64
   setTimeout(() => location.reload(true), 150);
 }
 
@@ -6808,11 +6831,11 @@ async function submitChangeMyPassword() {
   const actual = document.getElementById("f-chg-actual").value || "";
   const nueva = document.getElementById("f-chg-nueva").value || "";
   const conf = document.getElementById("f-chg-conf").value || "";
-  const hashActual = await sha256(actual);
+  const hashActual = await sha256salted(actual); // H-08: salted
   if (hashActual !== user.passwordHash) { alert("Contraseña actual incorrecta."); return; }
   if (!nueva || nueva.length < 4) { alert("Contraseña muy corta."); return; }
   if (nueva !== conf) { alert("Las contraseñas nuevas no coinciden."); return; }
-  user.passwordHash = await sha256(nueva);
+  user.passwordHash = await sha256salted(nueva); // H-08: salted
   saveState();
   closeModal();
   toast("Contraseña actualizada.", "success");
@@ -6855,7 +6878,7 @@ async function submitResetPassword() {
   const nueva2 = document.getElementById("f-reset-pwd2").value || "";
   if (!nueva || nueva.length < 4) { alert("Contraseña muy corta."); return; }
   if (nueva !== nueva2) { alert("Las contraseñas no coinciden."); return; }
-  u.passwordHash = await sha256(nueva);
+  u.passwordHash = await sha256salted(nueva); // H-08: salted
   saveState();
   closeModal();
   render();
@@ -6922,7 +6945,7 @@ async function submitNuevoUsuario() {
   if (!password || password.length < 4) { alert("La contraseña debe tener al menos 4 caracteres."); return; }
   if (password !== password2) { alert("Las contraseñas no coinciden."); return; }
   if (!["admin", "vendedor", "instalador"].includes(rol)) { alert("Rol inválido."); return; }
-  const hash = await sha256(password);
+  const hash = await sha256salted(password); // H-08: salted
   if (!Array.isArray(state.config.users)) state.config.users = [];
   // FIX: Usar el máximo ID existente +1 para evitar colisiones al borrar/crear usuarios
   const usedNums = state.config.users.map(u => parseInt((u.id || "").replace("U", ""))).filter(n => !isNaN(n));
@@ -14261,7 +14284,7 @@ async function _retroSaveFoto(id, dataUrl) {
   if (!sb) throw new Error("Supabase SDK no cargó — sin conexión a internet o CDN bloqueado");
   const blob = _b64ToBlob(dataUrl);
   const path = id + ".jpg";
-  console.log("Subiendo retro foto a bucket:", _RETRO_BUCKET, "path:", path, "blob size:", blob.size);
+  debug("Subiendo retro foto a bucket:", _RETRO_BUCKET, "path:", path, "blob size:", blob.size);
   const { data: upData, error } = await sb.storage.from(_RETRO_BUCKET).upload(path, blob, { contentType: "image/jpeg", upsert: true });
   if (error) {
     console.error("Supabase retro upload error:", error);
