@@ -1913,6 +1913,10 @@ const SAMPLE_DATA = {
 };
 
 /* =================== STATE =================== */
+// Limpiar claves de versiones anteriores ANTES de cargar — libera espacio en localStorage del celular
+try { localStorage.removeItem("bnh_sistema_v3"); } catch(_) {}
+try { localStorage.removeItem("bnh_sistema_v2"); } catch(_) {}
+try { localStorage.removeItem("bnh_sistema");    } catch(_) {}
 const STORAGE_KEY = "bnh_sistema_v4";
 let state = loadState();
 let currentView = "dashboard";
@@ -4908,7 +4912,7 @@ function renderMiAgenda() {
     let llegaBtnHtml = "";
     if (!v.completada) {
       if (!enObra) {
-        const fn = v._esServicio ? `registrarLlegadaServicio('${v.id}')` : `registrarLlegadaAgenda('${v.idProy}', '${v.id}')`;
+        const fn = v._esServicio ? `registrarLlegadaServicio('${v.id}')` : `registrarLlegada('${v.idProy}')`;
         llegaBtnHtml = `<button onclick="event.stopPropagation(); ${fn}" title="Registrar llegada" style="background:#E8F5E9;border:1.5px solid #4CAF50;color:#2E7D32;width:30px;height:30px;border-radius:50%;cursor:pointer;font-size:13px;font-weight:700;font-family:inherit;display:flex;align-items:center;justify-content:center;">✔</button>`;
       } else {
         const fn = v._esServicio ? `confirmarCierreServicio('${v.id}')` : `registrarSalidaAgenda('${v.idProy}', '${v.id}')`;
