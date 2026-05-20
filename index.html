@@ -552,9 +552,10 @@
   @keyframes pulseDot { 0%,100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.15); opacity: 0.7; } }
 
   .idet-actions { display: flex; align-items: stretch; gap: 8px; margin-bottom: 14px; }
-  .idet-action-mini { display: flex; align-items: center; justify-content: center; width: 48px; min-width: 48px; border-radius: 10px; border: 1px solid var(--border); background: white; color: var(--navy); cursor: pointer; font-size: 20px; transition: all 0.15s; flex-shrink: 0; }
+  .idet-action-mini { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; flex: 1; min-height: 60px; padding: 10px 6px; border-radius: 10px; border: 1px solid var(--border); background: white; color: var(--navy); cursor: pointer; font-size: 20px; font-family: inherit; font-weight: 700; transition: all 0.15s; }
   .idet-action-mini:active { transform: scale(0.93); }
   .idet-action-mini:hover { background: var(--navy-light); border-color: var(--navy); }
+  .idet-action-mini-text { font-size: 11px; font-weight: 700; }
   .idet-action { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; min-height: 60px; padding: 10px 6px; border-radius: 10px; border: none; cursor: pointer; font-family: inherit; transition: all 0.15s; font-weight: 700; text-align: center; }
   .idet-action:active { transform: scale(0.97); }
   .idet-action-ico { font-size: 20px; line-height: 1; }
@@ -597,7 +598,8 @@
     .idet-action { min-height: 54px; padding: 8px 4px; }
     .idet-action-ico { font-size: 18px; }
     .idet-action-text { font-size: 10px; }
-    .idet-action-mini { width: 44px; min-width: 44px; font-size: 18px; }
+    .idet-action-mini { font-size: 18px; min-height: 54px; padding: 8px 4px; }
+    .idet-action-mini-text { font-size: 10px; }
     .idet-tab { padding: 10px 2px; }
     .idet-tab-label { font-size: 10px; }
   }
@@ -1518,6 +1520,29 @@ body { background: var(--warm-bg); }
 .nav-section { font-size: 10px; font-weight: 800; letter-spacing: 1.5px; text-transform: uppercase; padding: 14px 20px 5px; color: rgba(255,255,255,0.35); }
 .nav-item { transition: background 0.12s, color 0.12s; }
 
+/* ─── Retro section ──────────────────────────────── */
+.retro-upload-zone { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; min-height: 180px; border: 2.5px dashed var(--border); border-radius: 14px; background: white; cursor: pointer; transition: all .18s; color: var(--gray); padding: 20px; text-align: center; }
+.retro-upload-zone:hover, .retro-upload-zone.drag-over { border-color: var(--navy); background: var(--navy-light); color: var(--navy); }
+.retro-upload-zone .retro-upload-ico { font-size: 44px; line-height: 1; }
+.retro-upload-zone .retro-upload-label { font-size: 15px; font-weight: 700; }
+.retro-upload-zone .retro-upload-sub { font-size: 12px; opacity: .7; }
+.retro-preview-img { width: 100%; max-height: 260px; object-fit: cover; border-radius: 10px; border: 2px solid var(--border); }
+.retro-tipo-bar { display: flex; gap: 10px; margin-bottom: 14px; }
+.retro-tipo-btn { flex: 1; padding: 10px 6px; border-radius: 10px; border: 2px solid var(--border); background: white; font-size: 14px; font-weight: 700; cursor: pointer; font-family: inherit; transition: all .15s; display: flex; align-items: center; justify-content: center; gap: 6px; }
+.retro-tipo-btn.bueno.sel { border-color: var(--green); background: #E8F5E9; color: #1B5E20; }
+.retro-tipo-btn.malo.sel { border-color: var(--red); background: #FFEBEE; color: #B71C1C; }
+.retro-card { background: white; border-radius: 12px; box-shadow: var(--shadow); overflow: hidden; break-inside: avoid; margin-bottom: 14px; }
+.retro-card-img { width: 100%; aspect-ratio: 4/3; object-fit: cover; background: var(--gray-light); display: block; cursor: pointer; }
+.retro-card-body { padding: 10px 12px 12px; }
+.retro-card-badge { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 700; padding: 2px 9px; border-radius: 6px; text-transform: uppercase; margin-bottom: 6px; }
+.retro-card-badge.bueno { background: #E8F5E9; color: #1B5E20; }
+.retro-card-badge.malo { background: #FFEBEE; color: #B71C1C; }
+.retro-card-nota { font-size: 13px; color: var(--navy); line-height: 1.45; margin-bottom: 6px; }
+.retro-card-meta { font-size: 11px; color: var(--gray); }
+.retro-grid { columns: 2; column-gap: 12px; }
+@media (max-width: 520px) { .retro-grid { columns: 1; } }
+@media (min-width: 900px) { .retro-grid { columns: 3; } }
+
 /* ─── Mobile table scroll ────────────────────────── */
 .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 @media (max-width: 768px) {
@@ -1596,7 +1621,8 @@ body[data-rol="instalador"] .nav .v3-nav-terminados {
   display: none !important;
 }
 body[data-rol="instalador"] .nav [data-view="instalacion"],
-body[data-rol="instalador"] .nav [data-view="agenda"] {
+body[data-rol="instalador"] .nav [data-view="agenda"],
+body[data-rol="instalador"] .nav [data-view="retro"] {
   display: flex !important;
 }
 
@@ -1648,6 +1674,7 @@ body[data-rol="instalador"] .nav [data-view="agenda"] {
       <div class="nav-section">Operación</div>
       <div class="nav-item" data-view="instalacion"><span class="nav-icon">🔧</span><span>Instalación</span><span id="navBadgeInstalacion" class="nav-badge"></span></div>
       <div class="nav-item" data-view="agenda"><span class="nav-icon">📅</span><span>Mi agenda</span><span id="navBadgeAgenda" class="nav-badge"></span></div>
+      <div class="nav-item" data-view="retro"><span class="nav-icon">💬</span><span>Retro</span></div>
       
       <div class="nav-section nav-full">Datos</div>
       <div class="nav-item nav-full" data-view="arquitectos"><span class="nav-icon">◔</span><span>Arquitectos</span></div>
@@ -2109,6 +2136,8 @@ function ensureV4Migrations(data) {
     if (p.materialSolicitado === undefined) p.materialSolicitado = false;
     if (p.fechaEntregaTentativa === undefined) p.fechaEntregaTentativa = "";
   });
+  // Retro: retroalimentación de productos
+  if (!Array.isArray(data.retro)) data.retro = [];
   // Campos en servicios
   if (!data.servicios) data.servicios = [];
   data.servicios.forEach(s => {
@@ -3096,7 +3125,7 @@ function render() {
     if (!inAllowed) currentView = viewsAllowed[0] || "dashboard";
   }
   // Si es instalador y trata de ir a una vista no permitida, redirigir a instalacion
-  if (rol === "instalador" && accesoTotal && !["instalacion", "instalacion-detail", "dashboard", "calendario", "proyecto-detail", "arquitecto-detail"].includes(currentView)) {
+  if (rol === "instalador" && accesoTotal && !["instalacion", "instalacion-detail", "dashboard", "calendario", "proyecto-detail", "arquitecto-detail", "retro"].includes(currentView)) {
     currentView = "instalacion";
   }
   // Si NO es admin y trata de ir a Configuracion, redirigir a dashboard
@@ -3161,6 +3190,7 @@ function render() {
     case "servicio-detail": c.innerHTML = renderServicioDetail(); break;
     case "analisis": c.innerHTML = renderAnalisis(); afterAnalisis(); break;
     case "config": c.innerHTML = renderConfig(); break;
+    case "retro": c.innerHTML = renderRetro(); break;
   }
 }
 function destroyCharts() {
@@ -3448,9 +3478,19 @@ function renderInstalacionDetail() {
           <span class="idet-action-text">Registrar llegada</span>
         </button>`
       }
-      <label class="idet-action-mini" title="Tomar foto" for="idet-foto-${p.id}">📸<input type="file" id="idet-foto-${p.id}" accept="image/*" capture="environment" multiple style="display:none;" onchange="quickPhotoUpload('${p.id}', this)"></label>
-      <button class="idet-action-mini" title="Registrar avance" onclick="openAvanceModal('${p.id}')">📋</button>
-      <button class="idet-action-mini" title="Agregar pendiente" onclick="openPendienteModal('${p.id}')">⚠️</button>
+      <label class="idet-action-mini" title="Tomar foto" for="idet-foto-${p.id}">
+        <span class="idet-action-ico">📸</span>
+        <span class="idet-action-mini-text">Foto</span>
+        <input type="file" id="idet-foto-${p.id}" accept="image/*" capture="environment" multiple style="display:none;" onchange="quickPhotoUpload('${p.id}', this)">
+      </label>
+      <button class="idet-action-mini" title="Registrar avance" onclick="openAvanceModal('${p.id}')">
+        <span class="idet-action-ico">📋</span>
+        <span class="idet-action-mini-text">Avance</span>
+      </button>
+      <button class="idet-action-mini" title="Agregar pendiente" onclick="openPendienteModal('${p.id}')">
+        <span class="idet-action-ico">⚠️</span>
+        <span class="idet-action-mini-text">Pendiente</span>
+      </button>
     </div>
 
     ${!currentUserIsInstalador() && getInstaladores().length > 0 ? `
@@ -3515,9 +3555,6 @@ function renderInstalacionDetail() {
       ${tabActual === "avances" ? renderBitAvances(p) : tabActual === "fotos" ? renderBitFotos(p) : renderBitPendientes(p)}
     </div>
 
-    ${!isInstalador() ? `<div class="idet-footer">
-      <button class="btn btn-secondary btn-sm" onclick="openProyectoDetail('${p.id}')">📁 Ver proyecto completo</button>
-    </div>` : ""}
   `;
 }
 
@@ -4285,20 +4322,27 @@ function fmtHoras(h) {
 async function registrarLlegada(idProy) {
   const p = findProy(idProy);
   if (!p) return;
-  // Si tiene ubicacionGPS, validar distancia. Si no, BLOQUEAR y forzar captura primero.
-  if (!p.ubicacionGPS) {
-    toast("⚠ Este proyecto no tiene ubicación GPS. Captúrala primero para poder registrar llegadas.", "error");
-    installAccionMenuAbierto = null;
-    proyAccionMenuAbierto = null;
+  installAccionMenuAbierto = null;
+  proyAccionMenuAbierto = null;
+  // Verificar que el proyecto tenga GPS con coordenadas válidas. Si no, BLOQUEAR y forzar captura primero.
+  const gpsProyecto = p.ubicacionGPS;
+  const gpsValido = gpsProyecto && typeof gpsProyecto.lat === "number" && typeof gpsProyecto.lng === "number";
+  if (!gpsValido) {
+    toast("📍 Este proyecto no tiene GPS registrado. Primero captura la ubicación de la obra.", "error");
     openCapturarUbicacionModal(idProy);
     return;
   }
-  // Validar GPS
+  // Validar que el dispositivo tenga GPS activo antes de proceder
+  if (!navigator.geolocation) {
+    toast("❌ Tu dispositivo no soporta GPS. Actívalo para poder registrar llegadas.", "error");
+    return;
+  }
+  // Obtener ubicación actual del dispositivo
   const radio = (state.config && state.config.radioToleranciaMetros) || 200;
   toast("📍 Verificando tu ubicación…", "info");
   try {
     const pos = await capturarUbicacionActual();
-    const distancia = distanciaMetros(p.ubicacionGPS.lat, p.ubicacionGPS.lng, pos.lat, pos.lng);
+    const distancia = distanciaMetros(gpsProyecto.lat, gpsProyecto.lng, pos.lat, pos.lng);
     const gpsData = { lat: pos.lat, lng: pos.lng, accuracy: pos.accuracy, distanciaDelProyecto: distancia };
     if (distancia <= radio) {
       // Dentro del radio - registrar directo
@@ -4307,9 +4351,8 @@ async function registrarLlegada(idProy) {
     // Fuera del radio - pedir override con motivo
     openOverrideUbicacionModal(idProy, distancia, gpsData);
   } catch (err) {
-    if (confirm(`No se pudo obtener tu ubicación:\n\n${err.message}\n\n¿Registrar llegada sin validación GPS?`)) {
-      return registrarAsistencia(idProy, "llegada", { error: err.message });
-    }
+    // NO permitir bypass: si el GPS del dispositivo falla, bloquear el registro
+    toast(`❌ No se pudo obtener tu ubicación GPS: ${err.message}. Activa el GPS de tu dispositivo e intenta de nuevo.`, "error");
   }
 }
 
@@ -5410,6 +5453,12 @@ function renderBitAvances(p) {
             <span style="font-size: 11px; padding: 3px 10px; border-radius: 8px; background: ${info.bg}; color: ${info.color}; font-weight: 700; text-transform: uppercase;">${info.ico} ${escape(a.tag || "nota")}</span>
             <span style="font-size: 11px; color: var(--gray);">${fmtDateTime(a.fecha)}</span>
             <span style="font-size: 11px; color: var(--gray); font-weight: 600;">· ${escape(a.usuario || "—")}</span>
+            ${(() => {
+              if (!a._tiempoMins) return "";
+              const h = Math.floor(a._tiempoMins / 60), m = a._tiempoMins % 60;
+              const tiempoStr = h > 0 ? `${h}h ${m}m` : `${m} min`;
+              return `<span style="font-size: 11px; color: var(--gray); font-weight: 600;">· ⏱ ${tiempoStr} en obra</span>`;
+            })()}
           </div>
           <button class="icon-btn danger" onclick="deleteAvance('${p.id}', '${a.id}')" title="Eliminar avance">×</button>
         </div>
@@ -5636,9 +5685,7 @@ function openAvanceModal(idProy) {
       <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px;">
         ${[
           { v: "avance",   e: "✅", l: "Avance"   },
-          { v: "ajuste",   e: "🔧", l: "Ajuste"   },
-          { v: "problema", e: "⚠",  l: "Problema" },
-          { v: "nota",     e: "💬", l: "Nota"     }
+          { v: "problema", e: "⚠",  l: "Problema" }
         ].map((t, i) => `
           <label style="flex: 1; min-width: 70px; display: flex; align-items: center; justify-content: center; gap: 5px; padding: 9px 6px; border: 2px solid ${i === 0 ? 'var(--green)' : 'var(--border)'}; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 600; background: ${i === 0 ? '#E8F5E9' : 'white'}; transition: all .15s;" id="chip-${t.v}">
             <input type="radio" name="f-av-tag" value="${t.v}" ${i === 0 ? "checked" : ""} style="display:none;" onchange="document.querySelectorAll('[id^=chip-]').forEach(c=>{c.style.borderColor='var(--border)';c.style.background='white';c.style.color='inherit';}); this.parentElement.style.borderColor='var(--green)'; this.parentElement.style.background='#E8F5E9';">
@@ -5697,7 +5744,7 @@ function openAvanceModal(idProy) {
   `;
   document.getElementById("modalFooter").innerHTML = window._salidaDespuesDeAvance
     ? `<button class="btn btn-success" style="flex:1; padding: 11px;" onclick="submitModal()">💾 Guardar avance y registrar salida</button>`
-    : `<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
+    : `<button class="btn btn-secondary" style="flex:1; padding: 11px;" onclick="closeModal()">Cancelar</button>
        <button class="btn btn-success" style="flex:1; padding: 11px;" onclick="submitModal()">💾 Guardar avance</button>`;
   document.getElementById("modalOverlay").classList.add("open");
 }
@@ -13957,6 +14004,168 @@ function submitMuestrario() {
 }
 
 /* =================== CONFIG =================== */
+// ═══════════════════════════════════════════════════════
+//  RETRO — Retroalimentación de productos
+// ═══════════════════════════════════════════════════════
+function renderRetro() {
+  const items = (state.retro || []).slice().sort((a,b) => (b.fecha||"").localeCompare(a.fecha||""));
+  const usuario = getCurrentUser();
+
+  const cardHtml = items.length === 0
+    ? `<div style="text-align:center;padding:40px 20px;color:var(--gray);">
+        <div style="font-size:48px;margin-bottom:12px;">📸</div>
+        <div style="font-size:15px;font-weight:600;">Sin retro aún</div>
+        <div style="font-size:13px;margin-top:6px;">Sé el primero en subir una foto de producto</div>
+       </div>`
+    : `<div class="retro-grid">${items.map(r => {
+        const esBueno = r.tipo === "bueno";
+        return `<div class="retro-card">
+          ${r.foto ? `<img class="retro-card-img" src="${r.foto}" onclick="openRetroLightbox('${r.id}')" alt="retro">` : `<div style="width:100%;aspect-ratio:4/3;background:var(--gray-light);display:flex;align-items:center;justify-content:center;font-size:32px;color:var(--gray);">📦</div>`}
+          <div class="retro-card-body">
+            <span class="retro-card-badge ${r.tipo || 'bueno'}">${esBueno ? "👍 Bueno" : "👎 Malo"}</span>
+            ${r.nota ? `<div class="retro-card-nota">${escape(r.nota)}</div>` : ""}
+            <div class="retro-card-meta">${escape(r.usuario || "—")} · ${fmtDateTime(r.fecha)}</div>
+            ${getCurrentUser() === r.usuario || getActiveUser()?.rol === "admin" ? `<button onclick="deleteRetro('${r.id}')" style="margin-top:6px;border:none;background:none;color:var(--gray);font-size:11px;cursor:pointer;padding:0;">✕ Eliminar</button>` : ""}
+          </div>
+        </div>`;
+      }).join("")}</div>`;
+
+  return `
+    <div class="content-header">
+      <div class="content-title">💬 Retro — Retroalimentación de productos</div>
+    </div>
+    <div style="max-width:600px;margin:0 auto 20px;">
+      <!-- Formulario de nueva retro -->
+      <div class="card" style="margin-bottom:16px;">
+        <div class="card-header"><div class="card-title">Nueva retroalimentación</div></div>
+        <div class="card-body" style="padding:16px;">
+
+          <!-- Tipo: bueno / malo -->
+          <div class="retro-tipo-bar" id="retro-tipo-bar">
+            <button class="retro-tipo-btn bueno sel" id="retro-btn-bueno" onclick="setRetroTipo('bueno')">👍 Bueno</button>
+            <button class="retro-tipo-btn malo"      id="retro-btn-malo"  onclick="setRetroTipo('malo')">👎 Malo</button>
+          </div>
+
+          <!-- Zona de foto -->
+          <label class="retro-upload-zone" for="retro-foto-input" id="retro-upload-zone">
+            <span class="retro-upload-ico">📸</span>
+            <span class="retro-upload-label">Tomar o adjuntar foto</span>
+            <span class="retro-upload-sub">Toca para abrir la cámara</span>
+            <input type="file" id="retro-foto-input" accept="image/*" capture="environment" style="display:none;" onchange="retroFotoSeleccionada(this)">
+          </label>
+          <img id="retro-preview-img" class="retro-preview-img" style="display:none;margin-top:10px;" alt="preview">
+          <button id="retro-quitar-foto" onclick="retroQuitarFoto()" style="display:none;margin-top:6px;border:none;background:none;color:var(--red);font-size:12px;cursor:pointer;font-family:inherit;">✕ Quitar foto</button>
+
+          <!-- Nota -->
+          <textarea id="retro-nota" rows="3" placeholder="¿Qué observaste? (opcional — ej: la tela se despega en esquinas, el motor hace ruido al bajar…)"
+            style="margin-top:12px;width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;font-family:inherit;resize:vertical;line-height:1.45;"></textarea>
+
+          <!-- Guardar -->
+          <button onclick="guardarRetro()" style="margin-top:12px;width:100%;padding:13px;background:var(--navy);color:white;border:none;border-radius:10px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;transition:background .15s;">
+            💾 Guardar retroalimentación
+          </button>
+        </div>
+      </div>
+
+      <!-- Galería -->
+      <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--gray);margin-bottom:10px;">
+        ${items.length} entradas registradas
+      </div>
+      ${cardHtml}
+    </div>
+
+    <!-- Lightbox retro -->
+    <div id="retro-lightbox" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.92);z-index:9999;align-items:center;justify-content:center;flex-direction:column;padding:16px;" onclick="closeRetroLightbox()">
+      <img id="retro-lightbox-img" src="" style="max-width:100%;max-height:85vh;border-radius:8px;object-fit:contain;" alt="">
+      <div id="retro-lightbox-meta" style="color:white;font-size:13px;margin-top:12px;text-align:center;opacity:.8;"></div>
+    </div>
+  `;
+}
+
+let _retroTipo = "bueno";
+let _retroFotoB64 = null;
+
+function setRetroTipo(tipo) {
+  _retroTipo = tipo;
+  document.getElementById("retro-btn-bueno").className = "retro-tipo-btn bueno" + (tipo==="bueno"?" sel":"");
+  document.getElementById("retro-btn-malo").className  = "retro-tipo-btn malo"  + (tipo==="malo" ?" sel":"");
+}
+
+function retroFotoSeleccionada(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    _retroFotoB64 = e.target.result;
+    const prev = document.getElementById("retro-preview-img");
+    const zone = document.getElementById("retro-upload-zone");
+    const quitarBtn = document.getElementById("retro-quitar-foto");
+    if (prev) { prev.src = _retroFotoB64; prev.style.display = "block"; }
+    if (zone) zone.style.display = "none";
+    if (quitarBtn) quitarBtn.style.display = "inline-block";
+  };
+  reader.readAsDataURL(file);
+}
+
+function retroQuitarFoto() {
+  _retroFotoB64 = null;
+  const prev = document.getElementById("retro-preview-img");
+  const zone = document.getElementById("retro-upload-zone");
+  const quitarBtn = document.getElementById("retro-quitar-foto");
+  const inp = document.getElementById("retro-foto-input");
+  if (prev) { prev.src = ""; prev.style.display = "none"; }
+  if (zone) zone.style.display = "flex";
+  if (quitarBtn) quitarBtn.style.display = "none";
+  if (inp) inp.value = "";
+}
+
+function guardarRetro() {
+  const nota = (document.getElementById("retro-nota")?.value || "").trim();
+  if (!_retroFotoB64 && !nota) {
+    toast("Agrega al menos una foto o una nota.", "warning"); return;
+  }
+  if (!state.retro) state.retro = [];
+  const newId = "RT" + Date.now();
+  state.retro.push({
+    id: newId,
+    fecha: new Date().toISOString(),
+    usuario: getCurrentUser(),
+    tipo: _retroTipo,
+    foto: _retroFotoB64 || null,
+    nota: nota
+  });
+  _retroFotoB64 = null;
+  _retroTipo = "bueno";
+  saveState();
+  toast("✓ Retroalimentación guardada", "success");
+  render();
+}
+
+function deleteRetro(id) {
+  if (!confirm("¿Eliminar esta entrada de retro?")) return;
+  state.retro = (state.retro || []).filter(r => r.id !== id);
+  saveState();
+  render();
+}
+
+function openRetroLightbox(id) {
+  const r = (state.retro || []).find(x => x.id === id);
+  if (!r || !r.foto) return;
+  const lb = document.getElementById("retro-lightbox");
+  const img = document.getElementById("retro-lightbox-img");
+  const meta = document.getElementById("retro-lightbox-meta");
+  if (!lb || !img) return;
+  img.src = r.foto;
+  if (meta) meta.textContent = `${r.usuario || ""} · ${fmtDateTime(r.fecha)}${r.nota ? " — " + r.nota : ""}`;
+  lb.style.display = "flex";
+}
+
+function closeRetroLightbox() {
+  const lb = document.getElementById("retro-lightbox");
+  if (lb) lb.style.display = "none";
+}
+
+// ═══════════════════════════════════════════════════════
 function renderConfig() {
   const sizeKB = (JSON.stringify(state).length / 1024).toFixed(1);
   // Render edit list helper
