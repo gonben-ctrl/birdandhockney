@@ -14237,11 +14237,15 @@ async function _deleteFotoCloud(cloudPath) {
 
 async function _retroSaveFoto(id, dataUrl) {
   const sb = _getSb();
-  if (!sb) throw new Error("Supabase no disponible");
+  if (!sb) throw new Error("Supabase SDK no cargó — sin conexión a internet o CDN bloqueado");
   const blob = _b64ToBlob(dataUrl);
   const path = id + ".jpg";
-  const { error } = await sb.storage.from(_RETRO_BUCKET).upload(path, blob, { contentType: "image/jpeg", upsert: true });
-  if (error) throw error;
+  console.log("Subiendo retro foto a bucket:", _RETRO_BUCKET, "path:", path, "blob size:", blob.size);
+  const { data: upData, error } = await sb.storage.from(_RETRO_BUCKET).upload(path, blob, { contentType: "image/jpeg", upsert: true });
+  if (error) {
+    console.error("Supabase retro upload error:", error);
+    throw new Error(error.message || error.error || JSON.stringify(error));
+  }
   const { data } = sb.storage.from(_RETRO_BUCKET).getPublicUrl(path);
   return data.publicUrl;
 }
@@ -14384,7 +14388,8 @@ async function guardarRetro() {
     try {
       fotoUrl = await _retroSaveFoto(newId, _retroFotoB64);
     } catch(e) {
-      toast("⚠ No se pudo subir la foto a la nube. Verifica tu conexión e intenta de nuevo.", "error");
+      console.error("retro upload error:", e);
+      toast("⚠ Error subiendo foto: " + (e && (e.message || e.error || JSON.stringify(e))), "error");
       if (btn) { btn.disabled = false; btn.textContent = "💾 Enviar retroalimentación"; }
       return;
     }
