@@ -2447,6 +2447,7 @@ const _SB_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsI
 let _sbClient  = null;
 let _syncTimer = null;
 let _syncCh    = null;
+let _gpsCapturandoAhora = false; // bloquea el reemplazo de state durante captura GPS
 
 function _getSb() {
   if (!_sbClient && window.supabase) {
@@ -2516,6 +2517,8 @@ function initSupabaseRealtime() {
   _syncCh = sb.channel('bnh_sync')
     .on('postgres_changes', { event:'UPDATE', schema:'public', table:'sistema_sync' }, (payload) => {
       if (!payload.new || !payload.new.data) return;
+      // No reemplazar state si hay una captura GPS activa — evita race condition
+      if (_gpsCapturandoAhora) { console.log("GPS capture in progress, skipping realtime overwrite"); return; }
       const remoteTs = new Date(payload.new.updated_at).getTime();
       const localTs  = state._lastSaved || 0;
       if (remoteTs > localTs + 500) { // +500ms para ignorar eco propio
@@ -4357,32 +4360,38 @@ async function registrarLlegada(idProy) {
     toast("❌ Tu dispositivo no soporta GPS. Actívalo para poder registrar llegadas.", "error");
     return;
   }
-  const gpsProyecto = p.ubicacionGPS;
-  const gpsValido = gpsProyecto && typeof gpsProyecto.lat === "number" && typeof gpsProyecto.lng === "number"
-                    && !isNaN(gpsProyecto.lat) && !isNaN(gpsProyecto.lng);
   const radio = (state.config && state.config.radioToleranciaMetros) || 100;
   toast("📍 Obteniendo tu ubicación…", "info");
+  // Activar lock: bloquea que el sync de Supabase sobreescriba state durante la captura
+  _gpsCapturandoAhora = true;
   try {
     const pos = await capturarUbicacionActual();
 
+    // Re-buscar el proyecto en el estado ACTUAL después del await
+    const pNow = findProy(idProy);
+    if (!pNow) return;
+    const gpsNow = pNow.ubicacionGPS;
+    const gpsValidoNow = gpsNow && typeof gpsNow.lat === "number" && typeof gpsNow.lng === "number"
+                         && !isNaN(gpsNow.lat) && !isNaN(gpsNow.lng);
+
     // Sin GPS guardado: registrar la ubicación actual como referencia y registrar llegada
-    if (!gpsValido) {
-      p.ubicacionGPS = { lat: pos.lat, lng: pos.lng, accuracy: pos.accuracy, fuente: "auto-llegada", capturadoAt: new Date().toISOString(), capturadoPor: getCurrentUser() };
+    if (!gpsValidoNow) {
+      pNow.ubicacionGPS = { lat: pos.lat, lng: pos.lng, accuracy: pos.accuracy, fuente: "auto-llegada", capturadoAt: new Date().toISOString(), capturadoPor: getCurrentUser() };
       logEvent(idProy, "ubicacion", `GPS de obra registrado automáticamente en primera llegada: ${pos.lat.toFixed(6)}, ${pos.lng.toFixed(6)}`);
       saveState();
-      // Sync directo a Supabase para que el GPS no se pierda si localStorage falla
-      _syncUp().catch(e => console.warn("GPS sync error:", e));
+      // Sync directo a Supabase — awaiteado para que complete antes de liberar el lock
+      await _syncUp().catch(e => console.warn("GPS sync error:", e));
       toast("📍 Ubicación de obra guardada. Registrando llegada…", "success");
       return registrarAsistencia(idProy, "llegada", { lat: pos.lat, lng: pos.lng, accuracy: pos.accuracy, distanciaDelProyecto: 0 });
     }
 
-    // GPS muy impreciso: advertir pero continuar (el error de precisión puede ser > radio)
+    // GPS muy impreciso: advertir pero continuar
     if (pos.accuracy > 150) {
       toast(`⚠ GPS con poca precisión (±${pos.accuracy}m). Intenta al aire libre para mejor señal.`, "warning");
     }
 
     // Ya tiene GPS — verificar distancia. SIN opción de override: si estás lejos, no puedes registrar.
-    const distancia = distanciaMetros(gpsProyecto.lat, gpsProyecto.lng, pos.lat, pos.lng);
+    const distancia = distanciaMetros(gpsNow.lat, gpsNow.lng, pos.lat, pos.lng);
     const gpsData = { lat: pos.lat, lng: pos.lng, accuracy: pos.accuracy, distanciaDelProyecto: distancia };
     if (distancia <= radio) {
       return registrarAsistencia(idProy, "llegada", gpsData);
@@ -4392,6 +4401,8 @@ async function registrarLlegada(idProy) {
     toast(`❌ Estás a ${distancia}m de la obra. Debes estar dentro de ${radio}m para registrar llegada.`, "error");
   } catch (err) {
     toast(`❌ No se pudo obtener tu ubicación GPS: ${err.message}. Activa el GPS e intenta de nuevo.`, "error");
+  } finally {
+    _gpsCapturandoAhora = false; // siempre liberar el lock, incluso si hay error
   }
 }
 
