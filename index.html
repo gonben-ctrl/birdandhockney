@@ -5965,8 +5965,9 @@ async function submitAvance() {
       return `${ord ? ord.numero : idOrden}: u${[...nums].sort((a,b)=>a-b).join(", ")}`;
     }).join(" / ");
     const _primera = _partidas[0] || {};
+    const _nuevoServId = nextServicioId();
     state.servicios.push({
-      id: nextServicioId(),
+      id: _nuevoServId,
       idProy: p.id,
       fecha: today(),
       tipo: "Pendiente instalación",
@@ -5987,6 +5988,7 @@ async function submitAvance() {
       instaladorAsignado: _instaladorProy,
       _esInstalacionPendiente: true
     });
+    window._nuevoServicioId = _nuevoServId;
     serviciosGenerados++;
 
     // Marcar las unidades rojas como completadas (verde) — se les da seguimiento en el servicio
@@ -6051,14 +6053,21 @@ async function submitAvance() {
   if (_idSalida) {
     registrarAsistencia(_idSalida, "salida", null);
     if (serviciosGenerados > 0) {
-      toast(`🔧 ${serviciosGenerados} servicio(s) generado(s). Salida registrada.`, "success");
+      toast(`🔧 Salida registrada. Completa los datos del servicio.`, "success");
     } else {
       toast("Avance y salida registrados.", "success");
     }
   } else if (serviciosGenerados > 0) {
-    toast(`🔧 ${serviciosGenerados} servicio(s) generado(s). Avance registrado.`, "success");
+    toast(`🔧 Avance guardado. Completa los datos del servicio.`, "success");
   } else {
     toast("Avance registrado.", "success");
+  }
+
+  // Si se generaron unidades en rojo → abrir modal del servicio creado para completar info
+  if (serviciosGenerados > 0 && window._nuevoServicioId) {
+    const _sid = window._nuevoServicioId;
+    window._nuevoServicioId = null;
+    setTimeout(() => openServicioModal(_sid), 350);
   }
 }
 
@@ -14653,7 +14662,7 @@ document.addEventListener("click", function(e){
 // V3: Navigation guards — mobile + instalador
 (function(){
   var _desktopOnly = ["analisis","config","comercial","perdidos","cotizaciones","pagos","calendario"];
-  var _instViews   = ["instalacion","instalacion-detail","agenda","dashboard"];
+  var _instViews   = ["instalacion","instalacion-detail","agenda","dashboard","retro"];
   var _origNav = window.navigateTo;
   if(typeof _origNav === "function" && !_origNav._v3mobileGuard){
     window.navigateTo = function(view){
