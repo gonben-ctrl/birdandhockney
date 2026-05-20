@@ -14999,20 +14999,7 @@ function _agendaAddBitacora(idProy, tag) {
   p.ultimaActualizacion = ahora.toISOString().split("T")[0];
 }
 
-function registrarLlegadaAgenda(idProy, idVisita) {
-  _agendaAddBitacora(idProy, "llegada");
-  if (typeof saveStateNow === "function") saveStateNow();
-  if (typeof render === "function") render();
-  if (typeof toast === "function") toast("✓ Llegada registrada", "success");
-}
-
-function registrarSalidaAgenda(idProy, idVisita) {
-  _agendaAddBitacora(idProy, "salida");
-  if (typeof saveStateNow === "function") saveStateNow();
-  if (typeof render === "function") render();
-  if (typeof toast === "function") toast("✓ Salida registrada", "success");
-  setTimeout(function(){ if (typeof openAvanceModal === "function") openAvanceModal(idProy); }, 250);
-}
+// registrarLlegadaAgenda y registrarSalidaAgenda eliminadas — todo pasa por registrarLlegada() con GPS
 
 // ── Check-in/out para servicios programados en agenda ───────────────────
 function registrarLlegadaServicio(idServ) {
