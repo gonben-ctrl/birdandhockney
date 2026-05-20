@@ -3393,15 +3393,17 @@ function renderInstalacionDetail() {
       const horasPorInst2 = getHorasProyectoPorInstalador(p.id);
       const totalHoras2 = horasPorInst2.reduce((s, h) => s + h.horas, 0);
       const u = p.ubicacionGPS;
+      const gpsAutoSaved = u && u.fuente === "auto-llegada";
       const gpsHtml = u
-        ? `<div style="display:flex;align-items:center;gap:8px;">
-            <span style="font-size:18px;">📍</span>
+        ? `<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            <span style="font-size:18px;">${gpsAutoSaved ? "⚠️" : "📍"}</span>
             <div>
-              <div style="font-size:11px;font-weight:700;color:var(--green);text-transform:uppercase;letter-spacing:0.5px;">GPS activo</div>
+              <div style="font-size:11px;font-weight:700;color:${gpsAutoSaved ? "var(--gold)" : "var(--green)"};text-transform:uppercase;letter-spacing:0.5px;">${gpsAutoSaved ? "GPS auto (verificar)" : "GPS activo"}</div>
               <div style="font-size:10px;color:var(--gray);font-family:monospace;">${u.lat.toFixed(4)}, ${u.lng.toFixed(4)}</div>
+              ${gpsAutoSaved ? `<div style="font-size:9px;color:var(--gold);">Guardado en 1ª llegada — confirma que es correcto</div>` : ""}
             </div>
             <a href="https://www.google.com/maps/search/?api=1&query=${u.lat},${u.lng}" target="_blank" class="btn btn-secondary btn-sm" style="font-size:10px;padding:3px 8px;text-decoration:none;margin-left:4px;" onclick="event.stopPropagation();">Ver mapa</a>
-            ${!currentUserIsInstalador() ? `<button class="btn btn-secondary btn-sm" style="font-size:10px;padding:3px 6px;" onclick="openCapturarUbicacionModal('${p.id}')" title="Editar">✎</button>` : ""}
+            ${!currentUserIsInstalador() ? `<button class="btn ${gpsAutoSaved ? "" : "btn-secondary"} btn-sm" style="font-size:10px;padding:3px 6px;${gpsAutoSaved ? "background:var(--gold);color:white;" : ""}" onclick="openCapturarUbicacionModal('${p.id}')" title="${gpsAutoSaved ? "Verificar/corregir GPS" : "Editar GPS"}">${gpsAutoSaved ? "✓ Verificar" : "✎"}</button>` : ""}
            </div>`
         : `<div style="display:flex;align-items:center;gap:8px;">
             <span style="font-size:18px;">⚠</span>
@@ -4097,7 +4099,8 @@ function guardarUbicacionGPS() {
   if (!p) return;
   const coords = modalContext.data.tempCoords;
   const fromLlegada = modalContext.data.fromLlegada;
-  p.ubicacionGPS = coords;
+  // Al guardar manualmente, marcar como verificado (ya no como auto-llegada)
+  p.ubicacionGPS = { ...coords, fuente: coords.fuente === "auto-llegada" ? "manual" : (coords.fuente || "manual") };
   p.ultimaActualizacion = nowIso();
   logEvent(idProy, "ubicacion", `Ubicación GPS capturada (${coords.fuente}): ${coords.lat.toFixed(6)}, ${coords.lng.toFixed(6)}`);
   saveState();
@@ -4356,35 +4359,43 @@ async function registrarLlegada(idProy) {
   if (!p) return;
   installAccionMenuAbierto = null;
   proyAccionMenuAbierto = null;
-  // Verificar que el proyecto tenga GPS con coordenadas válidas. Si no, BLOQUEAR y forzar captura primero.
-  const gpsProyecto = p.ubicacionGPS;
-  const gpsValido = gpsProyecto && typeof gpsProyecto.lat === "number" && typeof gpsProyecto.lng === "number";
-  if (!gpsValido) {
-    toast("📍 Este proyecto no tiene GPS registrado. Captura la ubicación ahora.", "info");
-    openCapturarUbicacionModal(idProy, true); // true = viene de registrarLlegada, continuar auto
-    return;
-  }
-  // Validar que el dispositivo tenga GPS activo antes de proceder
   if (!navigator.geolocation) {
     toast("❌ Tu dispositivo no soporta GPS. Actívalo para poder registrar llegadas.", "error");
     return;
   }
-  // Obtener ubicación actual del dispositivo
+  const gpsProyecto = p.ubicacionGPS;
+  const gpsValido = gpsProyecto && typeof gpsProyecto.lat === "number" && typeof gpsProyecto.lng === "number"
+                    && !isNaN(gpsProyecto.lat) && !isNaN(gpsProyecto.lng);
   const radio = (state.config && state.config.radioToleranciaMetros) || 200;
-  toast("📍 Verificando tu ubicación…", "info");
+  toast("📍 Obteniendo tu ubicación…", "info");
   try {
     const pos = await capturarUbicacionActual();
+
+    // Sin GPS guardado: registrar la ubicación actual como referencia y registrar llegada
+    if (!gpsValido) {
+      p.ubicacionGPS = { lat: pos.lat, lng: pos.lng, accuracy: pos.accuracy, fuente: "auto-llegada", capturadoAt: new Date().toISOString(), capturadoPor: getCurrentUser() };
+      logEvent(idProy, "ubicacion", `GPS de obra registrado automáticamente en primera llegada: ${pos.lat.toFixed(6)}, ${pos.lng.toFixed(6)}`);
+      saveState();
+      toast("📍 Ubicación de obra guardada. Registrando llegada…", "success");
+      return registrarAsistencia(idProy, "llegada", { lat: pos.lat, lng: pos.lng, accuracy: pos.accuracy, distanciaDelProyecto: 0 });
+    }
+
+    // GPS muy impreciso: advertir pero continuar (el error de precisión puede ser > radio)
+    if (pos.accuracy > 150) {
+      toast(`⚠ GPS con poca precisión (±${pos.accuracy}m). Intenta al aire libre para mejor señal.`, "warning");
+    }
+
+    // Ya tiene GPS — verificar distancia. SIN opción de override: si estás lejos, no puedes registrar.
     const distancia = distanciaMetros(gpsProyecto.lat, gpsProyecto.lng, pos.lat, pos.lng);
     const gpsData = { lat: pos.lat, lng: pos.lng, accuracy: pos.accuracy, distanciaDelProyecto: distancia };
     if (distancia <= radio) {
-      // Dentro del radio - registrar directo
       return registrarAsistencia(idProy, "llegada", gpsData);
     }
-    // Fuera del radio - pedir override con motivo
-    openOverrideUbicacionModal(idProy, distancia, gpsData);
+
+    // Fuera de radio — bloqueo duro, sin posibilidad de saltarse la verificación
+    toast(`❌ Estás a ${distancia}m de la obra. Debes estar dentro de ${radio}m para registrar llegada.`, "error");
   } catch (err) {
-    // NO permitir bypass: si el GPS del dispositivo falla, bloquear el registro
-    toast(`❌ No se pudo obtener tu ubicación GPS: ${err.message}. Activa el GPS de tu dispositivo e intenta de nuevo.`, "error");
+    toast(`❌ No se pudo obtener tu ubicación GPS: ${err.message}. Activa el GPS e intenta de nuevo.`, "error");
   }
 }
 
@@ -4981,77 +4992,65 @@ function renderPuntualidad() {
   if (!filters.puntualidad) filters.puntualidad = { periodo: "mes", mes: new Date().getMonth(), anio: new Date().getFullYear(), instalador: "" };
   const f = filters.puntualidad;
 
-  // Recolectar TODOS los check-ins de todos los proyectos
-  const checkins = [];
-  const _visitasIds = new Set(); // para no duplicar
+  // Recolectar la PRIMERA llegada del día por (instalador + proyecto)
+  // Usamos un Map para garantizar que solo queda 1 entrada por clave, sin importar cuántas fuentes
+  const _primerLlegada = new Map(); // key: "usuario|idProy|díaLocal" → entrada más temprana
+
+  const _agregarCheckin = (entry) => {
+    if (!entry.horaLlegada || !entry.usuario || entry.usuario === "—" || !entry.idProy) return;
+    // Usar fecha LOCAL (no UTC) para no confundir días en zonas horarias
+    const d = new Date(entry.horaLlegada);
+    const diaLocal = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+    const key = `${entry.usuario}|${entry.idProy}|${diaLocal}`;
+    const existing = _primerLlegada.get(key);
+    // Guardar solo si es la llegada más temprana del día para esa combinación
+    if (!existing || entry.horaLlegada < existing.horaLlegada) {
+      _primerLlegada.set(key, { ...entry, mes: d.getMonth(), anio: d.getFullYear(), semana: getWeekNumber(d) });
+    }
+  };
+
   (state.proyectos || []).forEach(p => {
-    // Fuente 1: visitas programadas con horaLlegada (registros nuevos)
+    // Fuente 1: visitas programadas con horaLlegada
     (p.visitasProgramadas || []).forEach(v => {
       if (!v.horaLlegada) return;
-      _visitasIds.add(p.id + "_" + v.horaLlegada);
-      const d = new Date(v.horaLlegada);
-      checkins.push({
+      _agregarCheckin({
         idProy: p.id,
         nombreProy: p.nombre || p.id,
-        idVisita: v.id,
         fechaHora: v.fechaHora,
         horaLlegada: v.horaLlegada,
         minutosRetraso: v.minutosRetraso || 0,
         usuario: v.llegadaUsuario || "—",
-        instaladores: v.instaladores || [],
-        mes: d.getMonth(),
-        anio: d.getFullYear(),
-        semana: getWeekNumber(d)
+        instaladores: v.instaladores || []
       });
     });
-    // Fuente 2: bitacoraInstalacion.avances con tag "llegada" (registros históricos sin visita vinculada)
+    // Fuente 2: avances con tag "llegada" (registros históricos)
     const avances = (p.bitacoraInstalacion && p.bitacoraInstalacion.avances) || [];
     avances.filter(a => a.tag === "llegada").forEach(a => {
-      if (_visitasIds.has(p.id + "_" + a.fecha)) return; // ya contado
-      const d = new Date(a.fecha);
-      // Buscar visita programada más cercana para calcular retraso
       const visitas = (p.visitasProgramadas || []);
       let minutosRetraso = 0, fechaHoraProg = a.fecha;
       if (visitas.length > 0) {
+        const d = new Date(a.fecha);
         const sorted = visitas.slice().sort((va, vb) => Math.abs(new Date(va.fechaHora) - d) - Math.abs(new Date(vb.fechaHora) - d));
         const cercana = sorted[0];
-        const diffMs = Math.abs(new Date(cercana.fechaHora) - d);
-        if (diffMs <= 8 * 60 * 60 * 1000) {
+        if (Math.abs(new Date(cercana.fechaHora) - d) <= 8 * 60 * 60 * 1000) {
           minutosRetraso = Math.round((d - new Date(cercana.fechaHora)) / 60000);
           fechaHoraProg = cercana.fechaHora;
         }
       }
-      checkins.push({
+      _agregarCheckin({
         idProy: p.id,
         nombreProy: p.nombre || p.id,
-        idVisita: null,
         fechaHora: fechaHoraProg,
         horaLlegada: a.fecha,
         minutosRetraso,
         usuario: a.usuario || "—",
-        instaladores: [],
-        mes: d.getMonth(),
-        anio: d.getFullYear(),
-        semana: getWeekNumber(d)
+        instaladores: []
       });
     });
   });
 
-  // Deduplicar: solo la PRIMERA llegada del día por (instalador + proyecto)
-  // Si regresan después de comer, esa segunda llegada no cuenta
-  const _seen = new Map();
-  const checkinsFiltrados = [];
-  checkins
-    .slice()
-    .sort((a, b) => (a.horaLlegada || "").localeCompare(b.horaLlegada || "")) // orden cronológico
-    .forEach(c => {
-      const dia = (c.horaLlegada || "").slice(0, 10); // YYYY-MM-DD
-      const key = `${c.usuario}|${c.idProy}|${dia}`; // primera llegada por instalador + proyecto + día
-      if (!_seen.has(key)) {
-        _seen.set(key, true);
-        checkinsFiltrados.push(c);
-      }
-    });
+  // checkinsFiltrados = exactamente 1 entrada por (instalador + proyecto + día), la más temprana
+  const checkinsFiltrados = [..._primerLlegada.values()];
 
   // Filtrar por periodo — siempre sobre checkinsFiltrados (ya deduplicados)
   let filtrados = checkinsFiltrados;
