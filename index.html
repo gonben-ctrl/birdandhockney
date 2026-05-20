@@ -5446,7 +5446,7 @@ function renderBitAvances(p) {
                 <span style="font-size:11px;color:var(--gray);background:var(--gray-light);border-radius:4px;padding:2px 7px;">⏱ ${tiempoStr} en obra</span>
                 ${promStr && totalUds > 1 ? `<span style="font-size:11px;color:var(--gray);background:var(--gray-light);border-radius:4px;padding:2px 7px;">≈ ${promStr} / persiana</span>` : ""}
               </div>`;
-            })()}
+            })()}`;
           }
           // Fallback: buscar en p.bitacora el entry de la misma fecha/usuario (avances guardados antes de este sistema)
           if (a.tag === "avance" || a.tag === "ajuste") {
