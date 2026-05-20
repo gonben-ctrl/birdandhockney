@@ -2452,8 +2452,9 @@ async function _syncUp() {
   _setSyncUI('syncing');
   try {
     state._lastSaved = Date.now();
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    const { error } = await sb.from('sistema_sync').upsert({ id: 'main', data: state, updated_at: new Date().toISOString() });
+    const cleanState = _stateParaGuardar(); // sin base64 — fotos van a Supabase Storage
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(cleanState));
+    const { error } = await sb.from('sistema_sync').upsert({ id: 'main', data: cleanState, updated_at: new Date().toISOString() });
     if (error) throw error;
     _setSyncUI('ok');
   } catch(e) { console.warn('Sync↑ error:', e); _setSyncUI('err'); }
@@ -2484,7 +2485,7 @@ async function loadFromSupabase() {
         }
         if (localSession) state.config.session = localSession; // no pisar sesión activa
         state._lastSaved = remoteTs;
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(_stateParaGuardar()));
         render();
       }
     } else {
@@ -2510,7 +2511,7 @@ function initSupabaseRealtime() {
           ensureV4Migrations(state);
         }
         state._lastSaved = remoteTs;
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(_stateParaGuardar()));
         render();
         toast("✅ Datos actualizados desde otro dispositivo", "success");
       }
