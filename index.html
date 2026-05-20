@@ -2072,6 +2072,10 @@ function loadState() {
       const data = JSON.parse(saved);
       if (data.version === 4) {
         ensureV4Migrations(data);
+        // Limpiar claves viejas que ya no se usan (liberan espacio en localStorage)
+        localStorage.removeItem("bnh_sistema_v3");
+        localStorage.removeItem("bnh_sistema_v2");
+        localStorage.removeItem("bnh_sistema");
         return data;
       }
     }
@@ -2079,7 +2083,14 @@ function loadState() {
     saved = localStorage.getItem("bnh_sistema_v3");
     if (saved) {
       const data = JSON.parse(saved);
-      if (data.version === 3) return migrateToV4(data);
+      if (data.version === 3) {
+        const migrated = migrateToV4(data);
+        // Borrar v3 ahora que ya migramos
+        localStorage.removeItem("bnh_sistema_v3");
+        localStorage.removeItem("bnh_sistema_v2");
+        localStorage.removeItem("bnh_sistema");
+        return migrated;
+      }
     }
   } catch (e) { console.error(e); }
   const fresh = JSON.parse(JSON.stringify(SAMPLE_DATA));
@@ -2390,19 +2401,24 @@ function migrateToV4(data) {
   data.version = 4;
   return data;
 }
-// Devuelve copia del state sin base64 en fotos (las fotos van a Supabase Storage, no a localStorage)
+// Devuelve copia del state sin base64 en ninguna parte (las fotos van a Supabase Storage, no a localStorage)
+function _stripBase64Recursivo(obj) {
+  if (!obj || typeof obj !== "object") return;
+  if (Array.isArray(obj)) {
+    obj.forEach(item => _stripBase64Recursivo(item));
+  } else {
+    Object.keys(obj).forEach(key => {
+      if (typeof obj[key] === "string" && obj[key].startsWith("data:")) {
+        obj[key] = null; // quitar base64 — la URL de Supabase Storage ya está en cloud
+      } else {
+        _stripBase64Recursivo(obj[key]);
+      }
+    });
+  }
+}
 function _stateParaGuardar() {
   const s = JSON.parse(JSON.stringify(state));
-  (s.proyectos || []).forEach(p => {
-    ((p.bitacoraInstalacion && p.bitacoraInstalacion.fotos) || []).forEach(f => {
-      if (f.archivo && f.archivo.startsWith("data:")) f.archivo = null;
-    });
-  });
-  (s.servicios || []).forEach(sv => {
-    (sv.fotos || []).forEach(f => {
-      if (f.archivo && f.archivo.startsWith("data:")) f.archivo = null;
-    });
-  });
+  _stripBase64Recursivo(s); // limpieza recursiva: elimina data: URLs en cualquier campo
   return s;
 }
 
@@ -4354,6 +4370,8 @@ async function registrarLlegada(idProy) {
       p.ubicacionGPS = { lat: pos.lat, lng: pos.lng, accuracy: pos.accuracy, fuente: "auto-llegada", capturadoAt: new Date().toISOString(), capturadoPor: getCurrentUser() };
       logEvent(idProy, "ubicacion", `GPS de obra registrado automáticamente en primera llegada: ${pos.lat.toFixed(6)}, ${pos.lng.toFixed(6)}`);
       saveState();
+      // Sync directo a Supabase para que el GPS no se pierda si localStorage falla
+      _syncUp().catch(e => console.warn("GPS sync error:", e));
       toast("📍 Ubicación de obra guardada. Registrando llegada…", "success");
       return registrarAsistencia(idProy, "llegada", { lat: pos.lat, lng: pos.lng, accuracy: pos.accuracy, distanciaDelProyecto: 0 });
     }
